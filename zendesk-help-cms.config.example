@@ -8,9 +8,6 @@ company_uri = testingzendesk12.zendesk.com
 user = zendesk@maildrop.cc/token
 password = i8wZBLnQLjbPVS5darEBPpVOChX99R1IJEFJUlBJ
 
-# WebTranslateIt API key
-webtranslateit_api_key = LEkb4IJgDsV8tHp3qRD2pQ
-
 # Image CDN root url (optional)
 image_cdn = 'http://my.cdn.io/images'
 

@@ -160,11 +160,10 @@ class Pusher(object):
 
     def _has_content_changed(self, translation, item, locale):
         zendesk_content = self.req.get_translation(item, locale)
-        item_content = translation.to_dict(self.image_cdn)
-        for key in item_content:
+        for key in translation:
             zendesk_body = zendesk_content.get(key, '')
             zendesk_hash = hashlib.md5(zendesk_body.encode('utf-8'))
-            item_hash = hashlib.md5(item_content[key].encode('utf-8'))
+            item_hash = hashlib.md5(translation[key].encode('utf-8'))
             if zendesk_hash.hexdigest() != item_hash.hexdigest():
                 return True
         return False
@@ -175,20 +174,17 @@ class Pusher(object):
         meta = self.fs.save_json(item.meta_filepath, meta)
         item.meta = meta
 
-    def _push_item_translations(self, item):
-        missing_locales = self.req.get_missing_locales(item)
-        for translation in item.translations:
-            locale = utils.to_zendesk_locale(translation.locale)
-            data = {'translation': translation.to_dict(self.image_cdn)}
-            if locale in missing_locales:
-                print('New translation for locale {}'.format(translation.locale))
-                self.req.post_translation(item, data)
-            else:
-                if self._has_content_changed(translation, item, locale):
-                    print('Updating translation for locale {}'.format(translation.locale))
-                    self.req.put_translation(item, locale, data)
-                else:
-                    print('Nothing changed for locale {}'.format(translation.locale))
+    def _push_item_translation(self, item):
+        locale = model.DEFAULT_LOCALE
+        translation = item.to_translation(self.image_cdn)
+        translation.locale = locale
+        if self._has_content_changed(translation, item, locale):
+            data = {'translation': translation}
+            print('Updating translation for locale {}'.format(translation.locale))
+            self.req.put_translation(item, locale, data)
+        else:
+            print('Nothing changed for locale {}'.format(translation.locale))
+
 
     def _disable_article_comments(self, article):
         data = {
@@ -199,7 +195,8 @@ class Pusher(object):
     def _push(self, item, parent=None):
         if not item.zendesk_id:
             self._push_new_item(item, parent)
-        self._push_item_translations(item)
+        else:
+            self._push_item_translation(item)
 
     def push(self, categories):
         for category in categories:
