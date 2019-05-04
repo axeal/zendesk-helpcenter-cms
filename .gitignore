@@ -16,3 +16,4 @@ venv/
 *.sublime-workspace
 
 translator.config
+zendesk-help-cms.config

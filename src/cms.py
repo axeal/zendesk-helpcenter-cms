@@ -5,7 +5,6 @@ import configparser
 
 import zendesk
 import filesystem
-import translate
 
 DEFAULE_LOG_LEVEL = 'WARNING'
 CONFIG_FILE = 'zendesk-help-cms.config'
@@ -20,20 +19,10 @@ class ImportTask(object):
         print('Done')
 
 
-class TranslateTask(object):
-
-    def execute(self, args):
-        print('Running translate task...')
-        categories = filesystem.loader(args['root_folder']).load()
-        categories = translate.translator(args['webtranslateit_api_key']).create(categories)
-        filesystem.saver(args['root_folder']).save(categories)
-        print('Done')
-
-
 class ExportTask(object):
 
     def execute(self, args):
-        print('Running translate task...')
+        print('Running export task...')
         categories = filesystem.loader(args['root_folder']).load()
         filesystem_client = filesystem.client(args['root_folder'])
         zendesk.pusher(args['company_uri'], args['user'], args['password'],
@@ -53,7 +42,6 @@ class RemoveTask(object):
 
         item = filesystem.loader(args['root_folder']).load_from_path(path)
         zendesk.remover(args['company_uri'], args['user'], args['password']).remove(item)
-        translate.remover(args['webtranslateit_api_key']).remove(item)
         filesystem.remover(args['root_folder']).remove(item)
         print('Done')
 
@@ -73,8 +61,7 @@ class MoveTask(object):
             return
 
         item = filesystem.loader(args['root_folder']).load_from_path(src)
-        zendesk.mover(args['company_uri'], args['user'], args['password'], args['image_cdn']).move(item, dest)
-        translate.mover(args['webtranslateit_api_key']).move(item, dest)
+        zendesk.mover(args['company_uri'], args['user'], args['password'], args['image_cdn']).move(dest)
         filesystem.mover(args['root_folder']).move(item, dest)
         print('Done')
 
@@ -86,13 +73,11 @@ class DoctorTask(object):
         categories = filesystem.loader(args['root_folder']).load()
         filesystem_client = filesystem.client(args['root_folder'])
         filesystem_doctor = filesystem.doctor(args['root_folder'])
-        translate_doctor = translate.doctor(args['webtranslateit_api_key'])
         zendesk_doctor = zendesk.doctor(
             args['company_uri'], args['user'], args['password'], filesystem_client, args['force'])
 
         zendesk_doctor.fix(categories)
         filesystem_doctor.fix(categories)
-        translate_doctor.fix(categories)
 
         filesystem.saver(args['root_folder']).save(categories)
 
@@ -122,9 +107,6 @@ class ConfigTask(object):
             user = input('Zendesk\'s user name ({}):'.format(default_user)) or default_user
             default_password = default_config.get('password', '')
             password = input('Zendesk\'s password ({}):'.format(default_password)) or default_password
-            default_api_key = default_config.get('webtranslateit_api_key', '')
-            webtranslateit_api_key = input(
-                'WebTranslateIt private API key ({}):'.format(default_api_key)) or default_api_key
             default_image_cdn = default_config.get('image_cdn', '')
             image_cdn = input('CDN path for storing images ({}):'.format(default_image_cdn)) or default_image_cdn
             default_disable_article_comments = default_config.get('disable_article_comments', '')
@@ -134,7 +116,6 @@ class ConfigTask(object):
             company_uri = input('Zendesk\'s company uri:')
             user = input('Zendesk\'s user name:')
             password = input('Zendesk\'s password:')
-            webtranslateit_api_key = input('WebTranslateIt private API key:')
             image_cdn = input('CDN path for storing images:')
             disable_article_comments = input('Disable article comments:')
 
@@ -142,7 +123,6 @@ class ConfigTask(object):
             'company_uri': company_uri,
             'user': user,
             'password': password,
-            'webtranslateit_api_key': webtranslateit_api_key,
             'image_cdn': image_cdn,
             'disable_article_comments': disable_article_comments
         }
@@ -159,7 +139,6 @@ class ConfigTask(object):
 
 tasks = {
     'import': ImportTask(),
-    'translate': TranslateTask(),
     'export': ExportTask(),
     'remove': RemoveTask(),
     'move': MoveTask(),

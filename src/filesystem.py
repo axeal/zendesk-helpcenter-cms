@@ -6,8 +6,6 @@ import shutil
 
 import model
 
-GROUP_TRANSLATION_PATTERN = '{}.([a-zA-Z-]{{2,5}}){}'
-
 
 class FilesystemClient(object):
 
@@ -133,58 +131,14 @@ class Loader(object):
         articles = [a for a in files if a.endswith(model.Article._body_exp)]
         return map(lambda a: os.path.splitext(a)[0], articles)
 
-    def _group_locales(self, group):
-        pattern = GROUP_TRANSLATION_PATTERN.format(group.content_filename, group._content_exp)
-        locales = []
-        for filename in self.fs.read_files(group.path):
-            match = re.match(pattern, filename)
-            if match:
-                locales.append(match.group(1))
-        locales.append('')  # HACK use as default locale
-        return locales
-
-    def _article_locales(self, article):
-        locales = []
-        for name in self.fs.read_directories(article.section.path):
-            locales.append(name)
-        return locales
-
-    def _group_translations(self, group):
-        translations = []
-        locales = self._group_locales(group)
-        for locale in locales:
-            content_path = group.content_translation_filepath(locale)
-            content = self.fs.read_json(content_path)
-            if 'name' in content:
-                translations.append(model.GroupTranslation(locale, content['name'], content['description']))
-            else:
-                print('Missing content from {}. Skipping translation'.format(content_path))
-        return translations
-
-    def _article_translations(self, article):
-        translations = []
-        locales = self._article_locales(article)
-        for locale in locales:
-            content_path = article.content_translation_filepath(locale)
-            body_path = article.body_translation_filepath(locale)
-            content = self.fs.read_json(content_path)
-            body = self.fs.read_text(body_path)
-            if 'name' in content:
-                translations.append(model.ArticleTranslation(locale, content['name'], body))
-            else:
-                print('Missing content from {}. Skipping translation'.format(content_path))
-        return translations
-
     def _fill_category(self, category_name):
         category = self._load_category(os.path.join(self.fs.root_folder, category_name))
-        category.translations = self._group_translations(category)
         self._fill_sections(category)
         return category
 
     def _fill_sections(self, category):
         for section_name in self.fs.read_directories(category.path):
             section = self._load_section(category, section_name)
-            section.translations = self._group_translations(section)
             category.sections.append(section)
             self._fill_articles(section)
 
@@ -193,7 +147,6 @@ class Loader(object):
         article_names = self._filter_article_names(self.fs.read_files(articles_path))
         for article_name in article_names:
             article = self._load_article(section, article_name)
-            article.translations = self._article_translations(article)
             section.articles.append(article)
 
     def load(self):
@@ -212,7 +165,6 @@ class Loader(object):
             category = self._load_category(category_path)
             section = self._load_section(category, section_name)
             article = self._load_article(section, article_name)
-            article.translations = self._article_translations(article)
             return article
         elif os.path.samefile(os.path.dirname(path), self.fs.root_folder):
             return self._fill_category(os.path.basename(path))
@@ -231,9 +183,6 @@ class Remover(object):
         self.fs = fs
 
     def _remove_article(self, article):
-        for translation in article.translations:
-            self.fs.remove(article.content_translation_filepath(translation.locale))
-            self.fs.remove(article.body_translation_filepath(translation.locale))
         self.fs.remove(article.meta_filepath)
         self.fs.remove(article.content_filepath)
         self.fs.remove(article.body_filepath)
@@ -261,12 +210,6 @@ class Mover(object):
         if isinstance(item, model.Article):
             self.fs.move(item.meta_filepath, os.path.join(
                 dest, model.DEFAULT_LOCALE, item.meta_filename + item._meta_exp))
-            for translation in item.translations:
-                content_path = item.content_translation_filepath(translation.locale)
-                self.fs.move(content_path, os.path.join(
-                    dest, translation.locale, item.content_filename + item._content_exp))
-                body_path = item.body_translation_filepath(translation.locale)
-                self.fs.move(body_path, os.path.join(dest, translation.locale, item.content_filename + item._body_exp))
         if isinstance(item, model.Section):
             print('Moving category to {}'.format(dest))
             self.fs.move(item.path, dest)

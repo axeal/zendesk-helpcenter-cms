@@ -8,20 +8,21 @@ DEFAULT_LOCALE = 'en-US'
 class Base(object):
     _meta_exp = '.meta'
     _content_exp = '.json'
-    _translate_id_key = 'webtranslateit_ids'
     _zendesk_id_key = 'id'
+    meta_filename = ''
+    content_filename = ''
+    path = ''
 
     def __init__(self, name, filename):
         super().__init__()
         self.name = name
         self.filename = filename
-        self.translations = []
         self._meta = {}
 
     @property
     def meta(self):
         return self._meta
-
+        
     @meta.setter
     def meta(self, value):
         self._meta = value or {}
@@ -31,42 +32,12 @@ class Base(object):
         return self._meta.get(self._zendesk_id_key)
 
     @property
-    def translate_ids(self):
-        result = self._meta.get(self._translate_id_key, {})
-
-        # for legacy reasons
-        if not isinstance(result, dict):
-            return {}
-
-        return result
-
-    @translate_ids.setter
-    def translate_ids(self, value):
-        self._meta[self._translate_id_key] = value
-
-    @property
     def meta_filepath(self):
         return os.path.join(self.path, self.meta_filename + self._meta_exp)
 
     @property
     def content_filepath(self):
         return os.path.join(self.path, self.content_filename + self._content_exp)
-
-
-# TODO use for default locale
-class GroupTranslation(object):
-
-    def __init__(self, locale, name, description):
-        self.locale = locale or DEFAULT_LOCALE
-        self.name = name
-        self.description = description
-
-    def to_dict(self, image_cdn=None):
-        return {
-            'title': self.name,
-            'body': self.description,
-            'locale': utils.to_zendesk_locale(self.locale)
-        }
 
 
 class Group(Base):
@@ -86,14 +57,14 @@ class Group(Base):
     def to_dict(self, image_cdn=None):
         return {
             'name': self.name,
-            'description': self.description,
-            'locale': utils.to_zendesk_locale(DEFAULT_LOCALE)
+            'description': self.description
         }
 
-    def content_translation_filepath(self, locale):
-        if locale:
-            locale = '.' + locale
-        return os.path.join(self.path, self.content_filename + locale + self._content_exp)
+    def to_translation(self, image_cdn=None):
+        return {
+            'name': self.name,
+            'body': self.description
+        }
 
     def paths(self):
         return [self.content_filepath]
@@ -162,26 +133,6 @@ class Section(Group):
         return 'categories/{}/sections.json'.format(self.category.zendesk_id)
 
 
-# TODO use for default locale
-class ArticleTranslation(object):
-    def __init__(self, locale, name, body):
-        self.locale = locale
-        self.name = name
-        self.body = body
-
-    def to_dict(self, image_cdn=None):
-        body = self.body
-        if image_cdn:
-            body = utils.convert_to_cdn_path(image_cdn, body)
-        body = markdown.markdown(body)
-
-        return {
-            'title': self.name,
-            'body': body,
-            'locale': utils.to_zendesk_locale(self.locale)
-        }
-
-
 class Article(Base):
     zendesk_name = 'article'
     zendesk_group = 'articles'
@@ -217,20 +168,16 @@ class Article(Base):
         body = markdown.markdown(body)
         return {
             'title': self.name,
-            'body': body,
-            'locale': utils.to_zendesk_locale(DEFAULT_LOCALE)
+            'body': body
         }
+
+    def to_translation(self, image_cdn=None):
+        return self.to_dict(image_cdn)
 
     def to_content(self):
         return {
             'name': self.name
         }
-
-    def content_translation_filepath(self, locale):
-        return os.path.join(os.path.dirname(self.path), locale, self.content_filename + self._content_exp)
-
-    def body_translation_filepath(self, locale):
-        return os.path.join(os.path.dirname(self.path), locale, self.content_filename + self._body_exp)
 
     def paths(self):
         return [self.content_filepath, self.body_filepath]
