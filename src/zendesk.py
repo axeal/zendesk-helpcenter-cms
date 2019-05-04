@@ -141,7 +141,11 @@ class Fetcher(object):
                 zendesk_articles = self.req.get_items(model.Article, section)
                 category.sections.append(section)
                 for zendesk_article in zendesk_articles:
-                    body = html2text.html2text(zendesk_article.get('body', ''))
+                    zendesk_body = zendesk_article.get('body', '')
+                    if zendesk_body == None:
+                        body = ''
+                    else:
+                        body = html2text.html2text(zendesk_body)
                     article_filename = utils.slugify(zendesk_article['title'])
                     article = model.Article(section, zendesk_article['title'], body, article_filename)
                     print('Article %s created' % article.name)
@@ -177,7 +181,7 @@ class Pusher(object):
     def _push_item_translation(self, item):
         locale = model.DEFAULT_LOCALE
         translation = item.to_translation(self.image_cdn)
-        translation.locale = locale
+        translation['locale'] = locale
         if self._has_content_changed(translation, item, locale):
             data = {'translation': translation}
             print('Updating translation for locale {}'.format(translation.locale))
