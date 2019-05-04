@@ -1,4 +1,5 @@
 import json
+import yaml
 import os
 import logging
 import re
@@ -43,6 +44,22 @@ class FilesystemClient(object):
         text = self.read_text(path)
         if text:
             return json.loads(text)
+        else:
+            return {}
+
+    def save_yaml(self, path, data):
+        if os.path.exists(path):
+            new_data = data
+            data = self.read_yaml(path)
+            data.update(new_data)
+        text = yaml.dump(data)
+        self.save_text(path, text)
+        return data
+
+    def read_yaml(self, path):
+        text = self.read_text(path)
+        if text:
+            return yaml.load(text)
         else:
             return {}
 
