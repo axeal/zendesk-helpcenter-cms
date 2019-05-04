@@ -1,14 +1,11 @@
-zendesk-helpcenter-cms [![Build Status](https://travis-ci.org/KeepSafe/zendesk-helpcenter-cms.svg)](https://travis-ci.org/KeepSafe/zendesk-helpcenter-cms)
 ===================
 
-Python script for zendesk helpcenter translations.
+Python script for zendesk helpcenter synchronisation.
 
 ## Requirements
 
 1. Python 3.+
-2. [WebTranslateIt](https://webtranslateit.com) APIKey
-3. [Zendesk](www.zendesk.com) Account
-4. [wti](https://webtranslateit.com/en/tour/external_tools) command line tool from WebTranslateIt
+2. [Zendesk](www.zendesk.com) Account
 
 ## Installation
 
@@ -49,27 +46,15 @@ category/
 	section/
 		__group__.json
 		.group.meta
-		en-us/
-			title.md
-			title.json
-			.article_title.meta
+			article-title/
+				README.md
+				__article__.json
+				.article.meta
 ```
-
-### Uploading articles to WebTranslateIt
-
-Since we have the articles in Markdown in the main language we can now upload them to WebTranslateIt for translation. You can either use [wti](https://webtranslateit.com/en/tour/external_tools) command line tool provided by WebTranslateIt or simply run:
-
-`zendesk-help-cms translate`
-
-It will upload the articles to WebTranslateIt. From this point the interaction with WebTranslateIt should be done through `wti`. This includes downloading translated content, uploading new content, updating existing content and so on.
 
 ### Uploading translations to Zendesk
 
-When the translations are ready run:
-
-`wti pull`
-
-This will download all translations to the local folder with existing articles. To upload everything to Zendesk run
+To upload content to Zendesk run
 
 `zendesk-help-cms export`
 
@@ -91,10 +76,10 @@ category/
 	section/
 		__group__.json
 		.group.meta
-		en-us/
-			title.md
-			title.json
-			.article_title.meta
+			article-title/
+				README.md
+				__article__.json
+				.article.meta
 ```
 
 There are 3 kinds of objects: categories, sections and articles.
@@ -110,8 +95,6 @@ A category is a top level group, it holds sections. Each category had a `__group
 }
 ```
 
-This file will be translated giving you variants like `__group__.fr.json` for different languages. To change category name or description simply edit this file.
-
 The file needs to be created when you add a new category, either by hand or by running `zendesk-help-cms doctor`.
 
 Once a category is in Zendesk help centre it will also have `.group.meta` file containing the information from Zendesk. This file should not be edited and is for internal use only.
@@ -122,19 +105,11 @@ A sections is very similar to category except it holds articles. Everything else
 
 ### Articles
 
-Each article has a separate Markdown file with the name being the article's name in the help centre (!!! this needs to change as names must be translated !!!). The content of the markdown file is the body of the article.
+Each article has a separate folder with a slugified directory name. This folder contains the article body in the markdown file `README.md`, plus the article title in `__article__.json`.
 
 Once an article is in Zendesk it will also have a meta file. This file stores information from Zendesk and is for internal use by the script.
 
 ## Commands
-
-### Creating new items
-
-```
-zendesk-help-cms add "path/to/article.md"
-```
-
-It will create any necessary files. It won't upload the content anywhere. If you want to upload the content to Zendesk use `export` task. If you want to upload the content to WebTranslateIt use `wti`
 
 ### Removing items
 
@@ -143,7 +118,7 @@ zendesk-help-cms remove  "path/to/article.md"
 zendesk-help-cms remove "category"
 ```
 
-It will remove files locally and from Zendesk and WebTranslateIt. It will not remove categories/sections together with articles even if they are empty, it has to be done separately from removing articles. Removing category/section will remove everything in it.
+It will remove files locally and from Zendesk. It will not remove categories/sections together with articles even if they are empty, it has to be done separately from removing articles. Removing category/section will remove everything in it.
 
 ### Fixing missing files
 

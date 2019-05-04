@@ -127,10 +127,6 @@ class Loader(object):
         body = self.fs.read_text(body_path)
         return model.Article.from_dict(section, meta, content, body, article_name)
 
-    def _filter_article_names(self, files):
-        articles = [a for a in files if a.endswith(model.Article._body_exp)]
-        return map(lambda a: os.path.splitext(a)[0], articles)
-
     def _fill_category(self, category_name):
         category = self._load_category(os.path.join(self.fs.root_folder, category_name))
         self._fill_sections(category)
@@ -143,9 +139,7 @@ class Loader(object):
             self._fill_articles(section)
 
     def _fill_articles(self, section):
-        articles_path = model.Article.path_from_section(section)
-        article_names = self._filter_article_names(self.fs.read_files(articles_path))
-        for article_name in article_names:
+        for article_name in self.fs.read_directories(section.path):
             article = self._load_article(section, article_name)
             section.articles.append(article)
 
@@ -157,24 +151,28 @@ class Loader(object):
         return categories
 
     def load_from_path(self, path):
-        if os.path.isfile(path):
-            article_name, _ = os.path.splitext(os.path.basename(path))
-            section_path = os.path.dirname(os.path.dirname(path))
-            section_name = os.path.basename(section_path)
-            category_path = os.path.dirname(section_path)
-            category = self._load_category(category_path)
-            section = self._load_section(category, section_name)
-            article = self._load_article(section, article_name)
-            return article
-        elif os.path.samefile(os.path.dirname(path), self.fs.root_folder):
+        path = path.rstrip()
+        if os.path.relpath(self.fs.root_folder, path) == '..':
             return self._fill_category(os.path.basename(path))
-        else:
+        elif os.path.relpath(self.fs.root_folder, path) == '../..':
             section_name = os.path.basename(path)
             category_path = os.path.dirname(path)
             category = self._load_category(category_path)
             section = self._load_section(category, section_name)
             self._fill_articles(section)
             return section
+        elif os.path.relpath(self.fs.root_folder, path) == '../../..':
+            article_name = os.path.basename(path)
+            section_path = os.path.dirname(path)
+            section_name = os.path.basename(section_path)
+            category_path = os.path.dirname(section_path)
+            category = self._load_category(category_path)
+            section = self._load_section(category, section_name)
+            article = self._load_article(section, article_name)
+            return article
+        else:
+            return
+
 
 
 class Remover(object):
@@ -182,22 +180,8 @@ class Remover(object):
     def __init__(self, fs):
         self.fs = fs
 
-    def _remove_article(self, article):
-        self.fs.remove(article.meta_filepath)
-        self.fs.remove(article.content_filepath)
-        self.fs.remove(article.body_filepath)
-
-    def _remove_group(self, section):
-        self.fs.remove_dir(section.path)
-
     def remove(self, item):
-        # TODO to be improved
-        if isinstance(item, model.Article):
-            self._remove_article(item)
-        if isinstance(item, model.Section):
-            self._remove_group(item)
-        if isinstance(item, model.Category):
-            self._remove_group(item)
+        self.fs.remove_dir(item.path)
 
 
 class Mover(object):
@@ -206,16 +190,7 @@ class Mover(object):
         self.fs = fs
 
     def move(self, item, dest):
-        # TODO to be improved
-        if isinstance(item, model.Article):
-            self.fs.move(item.meta_filepath, os.path.join(
-                dest, model.DEFAULT_LOCALE, item.meta_filename + item._meta_exp))
-        if isinstance(item, model.Section):
-            print('Moving category to {}'.format(dest))
-            self.fs.move(item.path, dest)
-        if isinstance(item, model.Category):
-            print('Moving category to {}'.format(dest))
-            self.fs.move(item.path, dest)
+        self.fs.move(item.path, dest)
 
 
 class Doctor(object):

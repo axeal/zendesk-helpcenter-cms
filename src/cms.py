@@ -41,9 +41,12 @@ class RemoveTask(object):
             return
 
         item = filesystem.loader(args['root_folder']).load_from_path(path)
-        zendesk.remover(args['company_uri'], args['user'], args['password']).remove(item)
-        filesystem.remover(args['root_folder']).remove(item)
-        print('Done')
+        if item:
+            zendesk.remover(args['company_uri'], args['user'], args['password']).remove(item)
+            filesystem.remover(args['root_folder']).remove(item)
+            print('Done')
+        else:
+            logging.error('Path provided not a valid category, section or article')
 
 
 class MoveTask(object):
@@ -61,9 +64,13 @@ class MoveTask(object):
             return
 
         item = filesystem.loader(args['root_folder']).load_from_path(src)
-        zendesk.mover(args['company_uri'], args['user'], args['password'], args['image_cdn']).move(dest)
-        filesystem.mover(args['root_folder']).move(item, dest)
-        print('Done')
+        if item:
+            zendesk.mover(args['company_uri'], args['user'], args['password'], args['image_cdn']).move(dest)
+            filesystem.mover(args['root_folder']).move(item, dest)
+            print('Done')
+        else:
+            logging.error('Path provided not a valid category, section or article')
+        
 
 
 class DoctorTask(object):

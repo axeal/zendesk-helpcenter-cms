@@ -137,8 +137,9 @@ class Article(Base):
     zendesk_name = 'article'
     zendesk_group = 'articles'
 
-    _body_exp = '.mkdown'
-    _meta_pattern = '.article_{}'
+    body_filename = 'README.md'
+    meta_filename = '.article'
+    content_filename = '__article__'
 
     def __init__(self, section, name, body, filename):
         super().__init__(name, filename)
@@ -146,20 +147,12 @@ class Article(Base):
         self.section = section
 
     @property
-    def meta_filename(self):
-        return self._meta_pattern.format(self.content_filename)
-
-    @property
-    def content_filename(self):
-        return self.filename
-
-    @property
     def body_filepath(self):
-        return os.path.join(self.path, self.content_filename + self._body_exp)
+        return os.path.join(self.path, self.body_filename)
 
     @property
     def path(self):
-        return self.path_from_section(self.section)
+        return os.path.join(self.section.path, self.filename)
 
     def to_dict(self, image_cdn=None):
         body = self.body
@@ -182,16 +175,12 @@ class Article(Base):
     def paths(self):
         return [self.content_filepath, self.body_filepath]
 
-    @staticmethod
-    def path_from_section(section):
-        return os.path.join(section.path, DEFAULT_LOCALE)
-
     @classmethod
     def filepaths_from_path(cls, section, name):
-        path = cls.path_from_section(section)
-        meta_path = os.path.join(path, cls._meta_pattern.format(name) + cls._meta_exp)
-        content_path = os.path.join(path, name + cls._content_exp)
-        body_path = os.path.join(path, name + cls._body_exp)
+        path = os.path.join(section.path, name)
+        meta_path = os.path.join(path, cls.meta_filename + cls._meta_exp)
+        content_path = os.path.join(path, cls.content_filename + cls._content_exp)
+        body_path = os.path.join(path, cls.body_filename)
         return meta_path, content_path, body_path
 
     @staticmethod
