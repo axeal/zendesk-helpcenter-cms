@@ -1,7 +1,6 @@
 import logging
 import requests
 import json
-import html2text
 import hashlib
 from operator import attrgetter
 
@@ -129,15 +128,8 @@ class Fetcher(object):
                 zendesk_articles = self.req.get_items(model.Article, section)
                 category.sections.append(section)
                 for zendesk_article in zendesk_articles:
-                    zendesk_body = zendesk_article.get('body', '')
-                    if zendesk_body == None:
-                        body = ''
-                    else:
-                        body = html2text.html2text(zendesk_body)
-                    article_filename = utils.slugify(zendesk_article['title'])
-                    article = model.Article(section, zendesk_article['title'], body, article_filename)
+                    article = model.Article.from_zendesk(zendesk_article, section)
                     print('Article %s created' % article.name)
-                    article.meta = zendesk_article
                     section.articles.append(article)
         return categories
 

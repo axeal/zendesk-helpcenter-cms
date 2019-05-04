@@ -1,6 +1,7 @@
 import os
 import utils
 import markdown
+import html2text
 
 DEFAULT_LOCALE = 'en-US'
 
@@ -188,6 +189,17 @@ class Article(Base):
         article = Article(section, content['name'], body, filename)
         article.meta = meta
         return article
+
+    @staticmethod
+    def from_zendesk(zendesk_article, section):
+        zendesk_body = zendesk_article.get('body', '')
+        if zendesk_body == None:
+            body = ''
+        else:
+            body = html2text.html2text(zendesk_body)
+        article_filename = utils.slugify(zendesk_article['title'])
+        article = Article(section, zendesk_article['title'], body, article_filename)
+        article.meta = zendesk_article
 
     @property
     def new_item_url(self):
