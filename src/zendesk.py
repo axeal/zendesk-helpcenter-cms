@@ -20,8 +20,6 @@ class ZendeskRequest(object):
     items_in_group_url = '{}/{}/{}.json?per_page=100'
 
     translation_url = '{}/{}/translations/{}.json'
-    translations_url = '{}/{}/translations.json?per_page=100'
-    missing_translations_url = '{}/{}/translations/missing.json'
 
     def __init__(self, company_uri, user, password):
         super().__init__()
@@ -75,14 +73,8 @@ class ZendeskRequest(object):
         response = requests.get(full_url, auth=(self.user, self.password), verify=False)
         return self._parse_response(response).get(item.zendesk_group, {})
 
-    def get_missing_locales(self, item):
-        url = self.missing_translations_url.format(item.zendesk_group, item.zendesk_id)
-        full_url = self._translation_url_for(url)
-        response = requests.get(full_url, auth=(self.user, self.password), verify=False)
-        return self._parse_response(response).get('locales', [])
-
-    def get_translation(self, item, locale):
-        url = self.translation_url.format(item.zendesk_group, item.zendesk_id, locale)
+    def get_translation(self, item):
+        url = self.translation_url.format(item.zendesk_group, item.zendesk_id, model.DEFAULT_LOCALE)
         full_url = self._translation_url_for(url)
         response = requests.get(full_url, auth=(self.user, self.password), verify=False)
         return self._parse_response(response).get('translation', {})
@@ -91,8 +83,8 @@ class ZendeskRequest(object):
         url = self.item_url.format(item.zendesk_group, item.zendesk_id)
         return self._send_request(requests.put, url, data).get(item.zendesk_name, {})
 
-    def put_translation(self, item, locale, data):
-        url = self.translation_url.format(item.zendesk_group, item.zendesk_id, locale)
+    def put_translation(self, item, data):
+        url = self.translation_url.format(item.zendesk_group, item.zendesk_id, model.DEFAULT_LOCALE)
         return self._send_translation(requests.put, url, data).get('translation', {})
 
     def post(self, item, data, parent=None):
@@ -101,10 +93,6 @@ class ZendeskRequest(object):
         else:
             url = self.items_url.format(item.zendesk_group)
         return self._send_request(requests.post, url, data).get(item.zendesk_name, {})
-
-    def post_translation(self, item, data):
-        url = self.translations_url.format(item.zendesk_group, item.zendesk_id)
-        return self._send_translation(requests.post, url, data).get('translation', {})
 
     def delete(self, item):
         url = self.item_url.format(item.zendesk_group, item.zendesk_id)
@@ -162,8 +150,8 @@ class Pusher(object):
         self.image_cdn = image_cdn
         self.disable_comments = disable_comments
 
-    def _has_content_changed(self, translation, item, locale):
-        zendesk_content = self.req.get_translation(item, locale)
+    def _has_content_changed(self, translation, item):
+        zendesk_content = self.req.get_translation(item)
         for key in translation:
             zendesk_body = zendesk_content.get(key, '')
             zendesk_hash = hashlib.md5(zendesk_body.encode('utf-8'))
@@ -179,15 +167,13 @@ class Pusher(object):
         item.meta = meta
 
     def _push_item_translation(self, item):
-        locale = model.DEFAULT_LOCALE
         translation = item.to_translation(self.image_cdn)
-        translation['locale'] = locale
-        if self._has_content_changed(translation, item, locale):
+        if self._has_content_changed(translation, item):
+            print('Updating translation')
             data = {'translation': translation}
-            print('Updating translation for locale {}'.format(translation.locale))
-            self.req.put_translation(item, locale, data)
+            self.req.put_translation(item, data)
         else:
-            print('Nothing changed for locale {}'.format(translation.locale))
+            print('Nothing changed')
 
 
     def _disable_article_comments(self, article):
