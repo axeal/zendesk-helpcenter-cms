@@ -8,7 +8,7 @@ DEFAULT_LOCALE = 'en-US'
 
 class Base(object):
     _meta_exp = '.meta'
-    _content_exp = '.json'
+    _content_exp = '.yaml'
     _zendesk_id_key = 'id'
     meta_filename = ''
     content_filename = ''
@@ -200,6 +200,7 @@ class Article(Base):
         article_filename = utils.slugify(zendesk_article['title'])
         article = Article(section, zendesk_article['title'], body, article_filename)
         article.meta = zendesk_article
+        return article
 
     @property
     def new_item_url(self):

@@ -52,7 +52,7 @@ class FilesystemClient(object):
             new_data = data
             data = self.read_yaml(path)
             data.update(new_data)
-        text = yaml.dump(data)
+        text = yaml.dump(data, width=float("inf"))
         self.save_text(path, text)
         return data
 
@@ -101,7 +101,7 @@ class Saver(object):
 
     def _save_item(self, item):
         self.fs.save_json(item.meta_filepath, item.meta)
-        self.fs.save_json(item.content_filepath, item.to_content())
+        self.fs.save_yaml(item.content_filepath, item.to_content())
 
     def save(self, categories):
         for category in categories:
@@ -125,21 +125,21 @@ class Loader(object):
         category_name = os.path.basename(category_path)
         meta_path, content_path = model.Category.filepaths_from_path(category_path)
         meta = self.fs.read_json(meta_path)
-        content = self.fs.read_json(content_path)
+        content = self.fs.read_yaml(content_path)
         content = content or {'name': os.path.basename(category_path)}
         return model.Category.from_dict(meta, content, category_name)
 
     def _load_section(self, category, section_name):
         meta_path, content_path = model.Section.filepaths_from_path(category, section_name)
         meta = self.fs.read_json(meta_path)
-        content = self.fs.read_json(content_path)
+        content = self.fs.read_yaml(content_path)
         content = content or {'name': section_name}
         return model.Section.from_dict(category, meta, content, section_name)
 
     def _load_article(self, section, article_name):
         meta_path, content_path, body_path = model.Article.filepaths_from_path(section, article_name)
         meta = self.fs.read_json(meta_path)
-        content = self.fs.read_json(content_path)
+        content = self.fs.read_yaml(content_path)
         content = content or {'name': article_name}
         body = self.fs.read_text(body_path)
         return model.Article.from_dict(section, meta, content, body, article_name)
@@ -223,7 +223,7 @@ class Doctor(object):
                 new_value = input('Please provide a {} for this item (default: {}):'.format(key, value))
                 new_value = new_value or value
                 content[key] = new_value
-            self.fs.save_json(item.content_filepath, content)
+            self.fs.save_yaml(item.content_filepath, content)
         # else:
         #     content = self.fs.read_json(item.content_filepath)
         #     if 'name' not in content:
