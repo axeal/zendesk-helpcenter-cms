@@ -17,7 +17,6 @@ class Base(object):
         super().__init__()
         self.name = name
         self.filename = filename
-        self.translations = []
         self._meta = {}
 
     @property

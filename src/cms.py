@@ -22,7 +22,7 @@ class ImportTask(object):
 class ExportTask(object):
 
     def execute(self, args):
-        print('Running translate task...')
+        print('Running export task...')
         categories = filesystem.loader(args['root_folder']).load()
         filesystem_client = filesystem.client(args['root_folder'])
         zendesk.pusher(args['company_uri'], args['user'], args['password'],
