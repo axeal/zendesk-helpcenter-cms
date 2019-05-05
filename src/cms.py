@@ -15,7 +15,8 @@ class ImportTask(object):
     def execute(self, args):
         print('Running import task...')
         categories = zendesk.fetcher(args['company_uri'], args['user'], args['password']).fetch()
-        filesystem.saver(args['root_folder']).save(categories)
+        zendesk_client = zendesk.ZendeskRequest(args['company_uri'], args['user'], args['password'], args['public_uri'])
+        filesystem.saver(args['root_folder'], zendesk_client).save(categories)
         print('Done')
 
 

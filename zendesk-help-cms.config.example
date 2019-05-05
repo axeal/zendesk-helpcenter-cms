@@ -4,6 +4,9 @@
 # Zendesk company name
 company_uri = testingzendesk12.zendesk.com
 
+# External company name
+external_uri = testingzendesk12public.zendesk.com
+
 # Zendesk user name and password (or token)
 user = zendesk@maildrop.cc/token
 password = i8wZBLnQLjbPVS5darEBPpVOChX99R1IJEFJUlBJ

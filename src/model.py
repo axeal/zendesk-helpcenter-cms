@@ -219,6 +219,14 @@ class Attachment(Base):
         self.article = article
 
     @property
+    def path(self):
+        return os.path.join(self.article.path, 'attachments')
+
+    @property
+    def filepath(self):
+        return os.path.join(self.path, self.filename)
+
+    @property
     def meta_filename(self):
         return self._meta_filename.format(self.name)
 

@@ -21,11 +21,12 @@ class ZendeskRequest(object):
     attachment_url = 'articles/attachments/{}.json'
     translation_url = '{}/{}/translations/{}.json'
 
-    def __init__(self, company_uri, user, password):
+    def __init__(self, company_uri, user, password, public_uri=None):
         super().__init__()
         self.company_uri = company_uri
         self.user = user
         self.password = password
+        self.public_uri = public_uri
 
     def _url_for(self, path):
         return self._default_url.format(self.company_uri, path)
@@ -102,9 +103,9 @@ class ZendeskRequest(object):
                               verify=False)
         return self._parse_response(response)
 
-    def get_attachment(self, attachment, path):
-        url = attachment.meta.content_url
-        response = requests.get(url, stream=True)
+    def get_attachment(self, relative_path, path):
+        url = 'https://' + self.public_uri + relative_path
+        response = requests.get(url, stream=True, auth=(self.user, self.password))
         if response.status_code == 200:
             with open(path, 'wb') as file:
                 for chunk in response:
@@ -156,7 +157,7 @@ class Fetcher(object):
                     zendesk_attachments = self.req.get_items(model.Attachment, article)
                     section.articles.append(article)
                     for zendesk_attachment in zendesk_attachments:
-                        attachment = model.Attachment(section, zendesk_attachment['filename'])
+                        attachment = model.Attachment(article, zendesk_attachment['file_name'])
                         attachment.meta = zendesk_attachment
                         article.attachments[attachment.filename] = attachment
         return categories
@@ -338,7 +339,6 @@ class RecordNotFoundError(Exception):
 def fetcher(company_uri, user, password):
     req = ZendeskRequest(company_uri, user, password)
     return Fetcher(req)
-
 
 def pusher(company_uri, user, password, fs, image_cdn, disable_comments):
     req = ZendeskRequest(company_uri, user, password)
