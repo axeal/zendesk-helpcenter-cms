@@ -18,6 +18,7 @@ class ZendeskRequest(object):
     items_url = '{}.json?per_page=100'
     items_in_group_url = '{}/{}/{}.json?per_page=100'
 
+    attachment_url = 'articles/attachments/{}.json'
     translation_url = '{}/{}/translations/{}.json'
 
     def __init__(self, company_uri, user, password):
@@ -70,7 +71,7 @@ class ZendeskRequest(object):
             url = self.items_url.format(item.zendesk_group)
         full_url = self._url_for(url)
         response = requests.get(full_url, auth=(self.user, self.password), verify=False)
-        return self._parse_response(response).get(item.zendesk_group, {})
+        return self._parse_response(response).get(item.zendesk_group_list_prefix + item.zendesk_group, {})
 
     def get_translation(self, item):
         url = self.translation_url.format(item.zendesk_group, item.zendesk_id, model.DEFAULT_LOCALE)
@@ -93,8 +94,30 @@ class ZendeskRequest(object):
             url = self.items_url.format(item.zendesk_group)
         return self._send_request(requests.post, url, data).get(item.zendesk_name, {})
 
+    def post_attachment(self, attachment, content):
+        full_url = self._url_for(attachment.new_item_url)
+        data = {'inline': 'true', 'file': content}
+        response = requests.post(full_url, data,
+                              auth=(self.user, self.password),
+                              verify=False)
+        return self._parse_response(response)
+
+    def get_attachment(self, attachment, path):
+        url = attachment.meta.content_url
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            with open(path, 'wb') as file:
+                for chunk in response:
+                    file.write(chunk)
+            return True
+        else:
+            return False
+
     def delete(self, item):
-        url = self.item_url.format(item.zendesk_group, item.zendesk_id)
+        if item.zendesk_name == 'attachment':
+            url = self.attachment_url.format(item.zendesk_id)
+        else:
+            url = self.item_url.format(item.zendesk_group, item.zendesk_id)
         full_url = self._url_for(url)
         return self.raw_delete(full_url)
 
@@ -130,7 +153,12 @@ class Fetcher(object):
                 for zendesk_article in zendesk_articles:
                     article = model.Article.from_zendesk(zendesk_article, section)
                     print('Article %s created' % article.name)
+                    zendesk_attachments = self.req.get_items(model.Attachment, article)
                     section.articles.append(article)
+                    for zendesk_attachment in zendesk_attachments:
+                        attachment = model.Attachment(section, zendesk_attachment['filename'])
+                        attachment.meta = zendesk_attachment
+                        article.attachments[attachment.filename] = attachment
         return categories
 
 

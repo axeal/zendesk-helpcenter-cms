@@ -114,6 +114,9 @@ class Saver(object):
                     self._save_item(article)
                     logging.info('Article %s saved' % article.name)
                     self.fs.save_text(article.body_filepath, article.body)
+                    for _, attachment in article.attachments:
+                        self._save_item(attachment)
+                        logging.info('Attachment %s saved' % attachment.name)
 
 
 class Loader(object):
