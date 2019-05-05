@@ -13,6 +13,7 @@ class Base(object):
     meta_filename = ''
     content_filename = ''
     path = ''
+    zendesk_group_list_prefix = ''
 
     def __init__(self, name, filename):
         super().__init__()
@@ -144,6 +145,7 @@ class Article(Base):
 
     def __init__(self, section, name, body, filename):
         super().__init__(name, filename)
+        self.attachments = {}
         self.body = body
         self.section = section
 
@@ -205,3 +207,21 @@ class Article(Base):
     @property
     def new_item_url(self):
         return 'sections/{}/articles.json'.format(self.section.zendesk_id)
+
+class Attachment(Base):
+    zendesk_name = 'attachment'
+    zendesk_group = 'attachments'
+    zendesk_group_list_prefix = 'article_'
+    _meta_filename = '.{}'
+
+    def __init__(self, article, filename):
+        super().__init__(filename, filename)
+        self.article = article
+
+    @property
+    def meta_filename(self):
+        return self._meta_filename.format(self.name)
+
+    @property
+    def new_item_url(self):
+        return 'articles/{}/attachments.json'.format(self.article.zendesk_id)
