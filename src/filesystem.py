@@ -153,6 +153,15 @@ class Loader(object):
         body = self.fs.read_text(body_path)
         return model.Article.from_dict(section, meta, content, body, article_name)
 
+    def _load_attachment(self, article, attachment_name):
+        meta_path = model.Attachment.filepaths_from_path(article, attachment_name)
+        meta = self.fs.read_json(meta_path)
+        return model.Attachment.from_dict(article, meta, attachment_name)
+    
+    def _filter_attachment_names(self, files):
+        attachments = [a for a in files if not a.endswith(model.Attachment._meta_exp) and not a.startswith('.')]
+        return map(lambda a: os.path.splitext(a)[0], attachments)
+
     def _fill_category(self, category_name):
         category = self._load_category(os.path.join(self.fs.root_folder, category_name))
         self._fill_sections(category)
@@ -168,6 +177,14 @@ class Loader(object):
         for article_name in self.fs.read_directories(section.path):
             article = self._load_article(section, article_name)
             section.articles.append(article)
+            self._fill_attachments(article)
+
+    def _fill_attachments(self, article):
+        attachments_path = model.Attachment.path_from_article(article)
+        attachment_names = self._filter_attachment_names(self.fs.read_files(attachments_path))
+        for attachment_name in attachment_names:
+            attachment = self._load_attachment(article, attachment_name)
+            article.attachments[attachment_name] = attachment
 
     def load(self):
         categories = []
@@ -176,28 +193,6 @@ class Loader(object):
             categories.append(category)
         return categories
 
-    def load_from_path(self, path):
-        path = path.rstrip()
-        if os.path.relpath(self.fs.root_folder, path) == '..':
-            return self._fill_category(os.path.basename(path))
-        elif os.path.relpath(self.fs.root_folder, path) == '../..':
-            section_name = os.path.basename(path)
-            category_path = os.path.dirname(path)
-            category = self._load_category(category_path)
-            section = self._load_section(category, section_name)
-            self._fill_articles(section)
-            return section
-        elif os.path.relpath(self.fs.root_folder, path) == '../../..':
-            article_name = os.path.basename(path)
-            section_path = os.path.dirname(path)
-            section_name = os.path.basename(section_path)
-            category_path = os.path.dirname(section_path)
-            category = self._load_category(category_path)
-            section = self._load_section(category, section_name)
-            article = self._load_article(section, article_name)
-            return article
-        else:
-            return
 
 def saver(root_folder, zendesk_client=None):
     fs = FilesystemClient(root_folder)

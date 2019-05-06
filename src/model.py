@@ -230,6 +230,22 @@ class Attachment(Base):
     def meta_filename(self):
         return self._meta_filename.format(self.name)
 
+    @staticmethod
+    def from_dict(article, meta, filename):
+        attachment = Attachment(article, filename)
+        attachment.meta = meta
+        return attachment
+
+    @classmethod
+    def filepaths_from_path(cls, article, filename):
+        path = cls.path_from_article(article)
+        meta_path = os.path.join(path, cls._meta_filename.format(filename) + cls._meta_exp)
+        return meta_path
+
+    @staticmethod
+    def path_from_article(article):
+        return os.path.join(article.path, 'attachments')
+
     @property
     def new_item_url(self):
         return 'articles/{}/attachments.json'.format(self.article.zendesk_id)
