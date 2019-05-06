@@ -3,6 +3,7 @@ import requests
 import json
 import hashlib
 from operator import attrgetter
+import html2text
 import os
 
 import model
@@ -136,32 +137,66 @@ class Fetcher(object):
         super().__init__()
         self.req = req
 
+    def _get_group_attributes_and_filename(self, group):
+        attributes = {
+            'name': group['name'],
+            'description': group['description']
+        }
+        filename = utils.slugify(group['name'])
+        return attributes, filename
+
+    def _instantiate_category(self, zendesk_category):
+        attributes, filename = self._get_group_attributes_and_filename(zendesk_category)
+        category = model.Category(attributes, filename)
+        category.meta = zendesk_category
+        return category
+
+    def _instantiate_section(self, category, zendesk_section):
+        attributes, filename = self._get_group_attributes_and_filename(zendesk_section)
+        section = model.Section(category, attributes, filename)
+        section.meta = zendesk_section
+        return section
+
+    def _instantiate_article(self, section, zendesk_article):
+        attributes = {
+            'name': zendesk_article['title'],
+            'synced': False,
+            'draft': zendesk_article['draft']
+        }
+        filename = utils.slugify(zendesk_article['title'])
+        zendesk_body = zendesk_article.get('body', '')
+        zendesk_body = '' if zendesk_body == None else zendesk_body
+        body = html2text.html2text(zendesk_body)
+        article = model.Article(section, attributes, body, filename)
+        article.html = zendesk_body
+        article.meta = zendesk_article
+        return article
+
+    def _instantiate_attachment(self, article, zendesk_attachment):
+        attachment = model.Attachment(article, zendesk_attachment['file_name'])
+        attachment.meta = zendesk_attachment
+        return attachment
+
     def fetch(self):
         categories = []
         zendesk_categories = self.req.get_items(model.Category)
         for zendesk_category in zendesk_categories:
-            category_filename = utils.slugify(zendesk_category['name'])
-            category = model.Category(zendesk_category['name'], zendesk_category['description'], category_filename)
+            category = self._instantiate_category(zendesk_category)
             print('Category %s created' % category.name)
-            category.meta = zendesk_category
             zendesk_sections = self.req.get_items(model.Section, category)
             categories.append(category)
             for zendesk_section in zendesk_sections:
-                section_filename = utils.slugify(zendesk_section['name'])
-                section = model.Section(category, zendesk_section['name'],
-                                        zendesk_section['description'], section_filename)
+                section = self._instantiate_section(category, zendesk_section)
                 print('Section %s created' % section.name)
-                section.meta = zendesk_section
                 zendesk_articles = self.req.get_items(model.Article, section)
                 category.sections.append(section)
                 for zendesk_article in zendesk_articles:
-                    article = model.Article.from_zendesk(zendesk_article, section)
+                    article = self._instantiate_article(section, zendesk_article)
                     print('Article %s created' % article.name)
                     zendesk_attachments = self.req.get_items(model.Attachment, article)
                     section.articles.append(article)
                     for zendesk_attachment in zendesk_attachments:
-                        attachment = model.Attachment(article, zendesk_attachment['file_name'])
-                        attachment.meta = zendesk_attachment
+                        attachment = self._instantiate_attachment(article, zendesk_attachment)
                         article.attachments[attachment.filename] = attachment
         return categories
 
@@ -173,14 +208,14 @@ class Pusher(object):
         self.fs = fs
         self.disable_comments = disable_comments
 
-    def _have_attributes_changed(self, translation, item):
-        zendesk_attributes = self.req.get_translation(item)
-        for key in translation:
-            zendesk_body = zendesk_attributes.get(key, '')
+    def _have_attributes_changed(self, attributes, item):
+        for key in attributes:
+            zendesk_body = item.meta.get(key, '')
             zendesk_body = '' if zendesk_body == None else zendesk_body
             zendesk_hash = hashlib.md5(zendesk_body.encode('utf-8'))
-            item_hash = hashlib.md5(translation[key].encode('utf-8'))
+            item_hash = hashlib.md5(attributes[key].encode('utf-8'))
             if zendesk_hash.hexdigest() != item_hash.hexdigest():
+                print('key: %s meta: %s attribute: %s' %(key, zendesk_body, attributes[key]))
                 return True
         return False
 
@@ -190,12 +225,15 @@ class Pusher(object):
         meta = self.fs.save_json(item.meta_filepath, meta)
         item.meta = meta
 
-    def _push_item_translation(self, item):
+    def _push_group_translation(self, item):
         translation = item.to_translation()
-        if self._have_attributes_changed(translation, item):
+        if self._have_attributes_changed(item.to_attributes(), item):
             print('Updating translation')
             data = {'translation': translation}
             self.req.put_translation(item, data)
+            meta = self.req.get_item(item)
+            meta = self.fs.save_json(item.meta_filepath, meta)
+            item.meta = meta
         else:
             print('Nothing changed')
 
@@ -212,7 +250,7 @@ class Pusher(object):
         if not item.zendesk_id:
             self._push_new_item(item, parent)
         else:
-            self._push_item_translation(item)
+            self._push_group_translation(item)
         if isinstance(item, model.Section):
             self._check_and_update_section_category(item)
 
@@ -279,15 +317,18 @@ class Pusher(object):
                 print('Pushing section %s' % section.name)
                 self._push_group(section, category)
                 for article in section.articles:
-                    if not article.zendesk_id:
-                        self._push_new_item(article, section)
-                    print('Pushing attachments for article %s' % article.name)
-                    attachments_changed = False
-                    for _, attachment in article.attachments.items():
-                        if self._push_attachment(attachment):
-                            attachments_changed = True
-                    print('Pushing article %s' % article.name)
-                    self._push_article(article, section, attachments_changed)
+                    if article.synced == True:
+                        if not article.zendesk_id:
+                            self._push_new_item(article, section)
+                        print('Pushing attachments for article %s' % article.name)
+                        attachments_changed = False
+                        for _, attachment in article.attachments.items():
+                            if self._push_attachment(attachment):
+                                attachments_changed = True
+                        print('Pushing article %s' % article.name)
+                        self._push_article(article, section, attachments_changed)
+                    else:
+                        print('Skipping un-synced article %s' % article.name)
 
 
 class RecordNotFoundError(Exception):

@@ -1,7 +1,6 @@
 import os
 import utils
 import markdown
-import html2text
 import re
 
 DEFAULT_LOCALE = 'en-US'
@@ -77,8 +76,8 @@ class Category(Group):
     zendesk_name = 'category'
     zendesk_group = 'categories'
 
-    def __init__(self, name, description, filename):
-        super().__init__(name, description, filename)
+    def __init__(self, attributes, filename):
+        super().__init__(attributes['name'], attributes['description'], filename)
         self.sections = []
 
     @property
@@ -87,9 +86,7 @@ class Category(Group):
 
     @staticmethod
     def from_dict(meta, attributes, filename):
-        name = attributes['name']
-        description = attributes.get('description', '')
-        category = Category(name, description, filename)
+        category = Category(attributes, filename)
         category.meta = meta
         return category
 
@@ -108,8 +105,8 @@ class Section(Group):
     zendesk_name = 'section'
     zendesk_group = 'sections'
 
-    def __init__(self, category, name, description, filename):
-        super().__init__(name, description, filename)
+    def __init__(self, category, attributes, filename):
+        super().__init__(attributes['name'], attributes['description'], filename)
         self.articles = []
         self.category = category
 
@@ -124,10 +121,8 @@ class Section(Group):
         return meta_path, attributes_path
 
     @staticmethod
-    def from_dict(category, meta, content, filename):
-        name = content['name']
-        description = content.get('description', '')
-        section = Section(category, name, description, filename)
+    def from_dict(category, meta, attributes, filename):
+        section = Section(category, attributes, filename)
         section.meta = meta
         return section
 
@@ -143,12 +138,16 @@ class Article(Base):
     body_filename = 'README.md'
     meta_filename = '.article'
     attributes_filename = '__article__'
+    _html_exp = '.html'
 
-    def __init__(self, section, name, body, filename):
-        super().__init__(name, filename)
+    def __init__(self, section, attributes, body, filename):
+        super().__init__(attributes['name'], filename)
         self.attachments = {}
         self.body = body
         self.section = section
+        self.synced = attributes['synced']
+        self.draft = attributes['draft']
+        self.html = ''
 
     @property
     def body_filepath(self):
@@ -175,10 +174,14 @@ class Article(Base):
             'body': body
         }
 
-    def to_content(self):
-        return {
-            'name': self.name
+    def to_attributes(self):
+        attributes =  {
+            'name': self.name,
+            'draft': self.draft
         }
+        if self.synced == False:
+            attributes['synced'] = False
+        return attributes
 
     def generate_body(self):
         body = self.body
@@ -193,6 +196,10 @@ class Article(Base):
     def paths(self):
         return [self.attributes_filepath, self.body_filepath]
 
+    @property
+    def html_filepath(self):
+        return os.path.join(self.path, self.zendesk_name + self._html_exp)
+
     @classmethod
     def filepaths_from_path(cls, section, name):
         path = os.path.join(section.path, name)
@@ -203,18 +210,8 @@ class Article(Base):
 
     @staticmethod
     def from_dict(section, meta, attributes, body, filename):
-        article = Article(section, attributes['name'], body, filename)
+        article = Article(section, attributes, body, filename)
         article.meta = meta
-        return article
-
-    @staticmethod
-    def from_zendesk(zendesk_article, section):
-        zendesk_body = zendesk_article.get('body', '')
-        zendesk_body = '' if zendesk_body == None else zendesk_body
-        body = html2text.html2text(zendesk_body)
-        article_filename = utils.slugify(zendesk_article['title'])
-        article = Article(section, zendesk_article['title'], body, article_filename)
-        article.meta = zendesk_article
         return article
 
     @property

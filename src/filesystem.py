@@ -60,7 +60,7 @@ class FilesystemClient(object):
     def read_yaml(self, path):
         text = self.read_text(path)
         if text:
-            return yaml.load(text, Loader=yaml.BaseLoader)
+            return yaml.load(text, Loader=yaml.FullLoader)
         else:
             return {}
 
@@ -122,6 +122,7 @@ class Saver(object):
                     self._save_item(article)
                     logging.info('Article %s saved' % article.name)
                     self.fs.save_text(article.body_filepath, article.body)
+                    self.fs.save_text(article.html_filepath, article.html)
                     for _, attachment in article.attachments.items():
                         self._save_attachment(attachment)
                         logging.info('Attachment %s saved' % attachment.name)
@@ -137,21 +138,31 @@ class Loader(object):
         meta_path, attributes_path = model.Category.filepaths_from_path(category_path)
         meta = self.fs.read_json(meta_path)
         attributes = self.fs.read_yaml(attributes_path)
-        attributes = attributes or {'name': os.path.basename(category_path)}
+        attributes =  {
+            'name': attributes.get('name', os.path.basename(category_path)),
+            'description': attributes.get('description', '')
+        }
         return model.Category.from_dict(meta, attributes, category_name)
 
     def _load_section(self, category, section_name):
         meta_path, attributes_path = model.Section.filepaths_from_path(category, section_name)
         meta = self.fs.read_json(meta_path)
         attributes = self.fs.read_yaml(attributes_path)
-        attributes = attributes or {'name': section_name}
+        attributes = {
+            'name': attributes.get('name', section_name),
+            'description': attributes.get('description', '')
+        }
         return model.Section.from_dict(category, meta, attributes, section_name)
 
     def _load_article(self, section, article_name):
         meta_path, attributes_path, body_path = model.Article.filepaths_from_path(section, article_name)
         meta = self.fs.read_json(meta_path)
         attributes = self.fs.read_yaml(attributes_path)
-        attributes = attributes or {'name': article_name}
+        attributes = {
+            'name': attributes.get('name', article_name),
+            'synced': attributes.get('synced', True),
+            'draft': attributes.get('draft', True)
+        }
         body = self.fs.read_text(body_path)
         return model.Article.from_dict(section, meta, attributes, body, article_name)
 
