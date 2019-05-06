@@ -9,10 +9,10 @@ DEFAULT_LOCALE = 'en-US'
 
 class Base(object):
     _meta_exp = '.meta'
-    _content_exp = '.yaml'
+    _attributes_exp = '.yaml'
     _zendesk_id_key = 'id'
     meta_filename = ''
-    content_filename = ''
+    attributes_filename = ''
     path = ''
     zendesk_group_list_prefix = ''
 
@@ -39,19 +39,19 @@ class Base(object):
         return os.path.join(self.path, self.meta_filename + self._meta_exp)
 
     @property
-    def content_filepath(self):
-        return os.path.join(self.path, self.content_filename + self._content_exp)
+    def attributes_filepath(self):
+        return os.path.join(self.path, self.attributes_filename + self._attributes_exp)
 
 
 class Group(Base):
     meta_filename = '.group'
-    content_filename = '__group__'
+    attributes_filename = '__group__'
 
     def __init__(self, name, description, filename):
         super().__init__(name, filename)
         self.description = description
 
-    def to_content(self):
+    def to_attributes(self):
         return {
             'name': self.name,
             'description': self.description
@@ -70,7 +70,7 @@ class Group(Base):
         }
 
     def paths(self):
-        return [self.content_filepath]
+        return [self.attributes_filepath]
 
 
 class Category(Group):
@@ -86,9 +86,9 @@ class Category(Group):
         return self.filename
 
     @staticmethod
-    def from_dict(meta, content, filename):
-        name = content['name']
-        description = content.get('description', '')
+    def from_dict(meta, attributes, filename):
+        name = attributes['name']
+        description = attributes.get('description', '')
         category = Category(name, description, filename)
         category.meta = meta
         return category
@@ -96,8 +96,8 @@ class Category(Group):
     @classmethod
     def filepaths_from_path(cls, path):
         meta_path = os.path.join(path, cls.meta_filename + cls._meta_exp)
-        content_path = os.path.join(path, cls.content_filename + cls._content_exp)
-        return meta_path, content_path
+        attributes_path = os.path.join(path, cls.attributes_filename + cls._attributes_exp)
+        return meta_path, attributes_path
 
     @property
     def new_item_url(self):
@@ -120,8 +120,8 @@ class Section(Group):
     @classmethod
     def filepaths_from_path(cls, category, path):
         meta_path = os.path.join(category.path, path, cls.meta_filename + cls._meta_exp)
-        content_path = os.path.join(category.path, path, cls.content_filename + cls._content_exp)
-        return meta_path, content_path
+        attributes_path = os.path.join(path, cls.attributes_filename + cls._attributes_exp)
+        return meta_path, attributes_path
 
     @staticmethod
     def from_dict(category, meta, content, filename):
@@ -142,7 +142,7 @@ class Article(Base):
 
     body_filename = 'README.md'
     meta_filename = '.article'
-    content_filename = '__article__'
+    attributes_filename = '__article__'
 
     def __init__(self, section, name, body, filename):
         super().__init__(name, filename)
@@ -191,19 +191,19 @@ class Article(Base):
         return body
 
     def paths(self):
-        return [self.content_filepath, self.body_filepath]
+        return [self.attributes_filepath, self.body_filepath]
 
     @classmethod
     def filepaths_from_path(cls, section, name):
         path = os.path.join(section.path, name)
         meta_path = os.path.join(path, cls.meta_filename + cls._meta_exp)
-        content_path = os.path.join(path, cls.content_filename + cls._content_exp)
+        attributes_path = os.path.join(path, cls.attributes_filename + cls._attributes_exp)
         body_path = os.path.join(path, cls.body_filename)
-        return meta_path, content_path, body_path
+        return meta_path, attributes_path, body_path
 
     @staticmethod
-    def from_dict(section, meta, content, body, filename):
-        article = Article(section, content['name'], body, filename)
+    def from_dict(section, meta, attributes, body, filename):
+        article = Article(section, attributes['name'], body, filename)
         article.meta = meta
         return article
 
