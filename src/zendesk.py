@@ -118,7 +118,7 @@ class ZendeskRequest(object):
             return False
 
     def delete(self, item):
-        if item.zendesk_name == 'attachment':
+        if isinstance(item, model.Attachment):
             url = self.attachment_url.format(item.zendesk_id)
         else:
             url = self.item_url.format(item.zendesk_group, item.zendesk_id)
@@ -199,11 +199,22 @@ class Pusher(object):
         else:
             print('Nothing changed')
 
+    def _check_and_update_section_category(self, section):
+        existing_category_id = section.meta.get('category_id', '')
+        if section.category.zendesk_id != existing_category_id:
+            logging.info('Updating category ID for section %s from %s to %s' % (section.name, existing_category_id, section.category.zendesk_id))
+            data = {'category_id': section.category.zendesk_id}
+            meta = self.req.put(section, data)
+            meta = self.fs.save_json(section.meta_filepath, meta)
+            section.meta = meta
+
     def _push_group(self, item, parent=None):
         if not item.zendesk_id:
             self._push_new_item(item, parent)
         else:
             self._push_item_translation(item)
+        if isinstance(item, model.Section):
+            self._check_and_update_section_category(item)
 
     def _has_article_body_changed(self, article):
         article_body_full_path = self.fs.path_for(article.body_filepath)
@@ -221,9 +232,19 @@ class Pusher(object):
         article.meta['md5_hash'] = article_md5_hash
         article.meta = self.fs.save_json(article.meta_filepath, article.meta)
 
+    def _check_and_update_article_section(self, article):
+        existing_section_id = article.meta.get('section_id', '')
+        if article.section.zendesk_id != existing_section_id:
+            logging.info('Updating section ID for article %s from %s to %s' % (article.name, existing_section_id, article.section.zendesk_id))
+            data = {'section_id': article.section.zendesk_id}
+            meta = self.req.put(article, data)
+            meta = self.fs.save_json(article.meta_filepath, meta)
+            article.meta = meta
+
     def _push_article(self, article, section, attachments_changed):
         if attachments_changed or self._has_article_body_changed(article):
             self._push_new_article_translation(article)
+        self._check_and_update_article_section(article)
 
     def _has_attachment_changed(self, attachment):
         attachment_full_path = self.fs.path_for(attachment.filepath)
