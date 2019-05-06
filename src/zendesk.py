@@ -173,10 +173,10 @@ class Pusher(object):
         self.fs = fs
         self.disable_comments = disable_comments
 
-    def _has_content_changed(self, translation, item):
-        zendesk_content = self.req.get_translation(item)
+    def _have_attributes_changed(self, translation, item):
+        zendesk_attributes = self.req.get_translation(item)
         for key in translation:
-            zendesk_body = zendesk_content.get(key, '')
+            zendesk_body = zendesk_attributes.get(key, '')
             zendesk_body = '' if zendesk_body == None else zendesk_body
             zendesk_hash = hashlib.md5(zendesk_body.encode('utf-8'))
             item_hash = hashlib.md5(translation[key].encode('utf-8'))
@@ -192,7 +192,7 @@ class Pusher(object):
 
     def _push_item_translation(self, item):
         translation = item.to_translation()
-        if self._has_content_changed(translation, item):
+        if self._have_attributes_changed(translation, item):
             print('Updating translation')
             data = {'translation': translation}
             self.req.put_translation(item, data)
