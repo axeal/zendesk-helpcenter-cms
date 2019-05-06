@@ -199,60 +199,6 @@ class Loader(object):
         else:
             return
 
-
-
-class Remover(object):
-
-    def __init__(self, fs):
-        self.fs = fs
-
-    def remove(self, item):
-        self.fs.remove_dir(item.path)
-
-
-class Mover(object):
-
-    def __init__(self, fs):
-        self.fs = fs
-
-    def move(self, item, dest):
-        self.fs.move(item.path, dest)
-
-
-class Doctor(object):
-
-    def __init__(self, fs):
-        self.fs = fs
-
-    def _fix_item_content(self, item):
-        if not os.path.exists(item.content_filepath):
-            print('Missing content file {} created'.format(item.content_filepath))
-            content = item.to_content()
-            for key, value in content.items():
-                new_value = input('Please provide a {} for this item (default: {}):'.format(key, value))
-                new_value = new_value or value
-                content[key] = new_value
-            self.fs.save_yaml(item.content_filepath, content)
-        # else:
-        #     content = self.fs.read_json(item.content_filepath)
-        #     if 'name' not in content:
-        #         print('Content {} is invalid'.format(item.content_filepath))
-        #         item_content = item.to_content()
-        #         for key, value in item_content.items():
-        #             new_value = input('Please provide a {} for this item (default: {})'.format(key, value))
-        #             new_value = new_value or value
-        #             item_content[key] = new_value
-        #         self.fs.save_json(item.content_filepath, item_content)
-
-    def fix(self, categories):
-        for category in categories:
-            self._fix_item_content(category)
-            for section in category.sections:
-                self._fix_item_content(section)
-                for article in section.articles:
-                    self._fix_item_content(article)
-
-
 def saver(root_folder, zendesk_client=None):
     fs = FilesystemClient(root_folder)
     return Saver(fs, zendesk_client)
@@ -261,21 +207,6 @@ def saver(root_folder, zendesk_client=None):
 def loader(root_folder):
     fs = FilesystemClient(root_folder)
     return Loader(fs)
-
-
-def remover(root_folder):
-    fs = FilesystemClient(root_folder)
-    return Remover(fs)
-
-
-def mover(root_folder):
-    fs = FilesystemClient(root_folder)
-    return Mover(fs)
-
-
-def doctor(root_folder):
-    fs = FilesystemClient(root_folder)
-    return Doctor(fs)
 
 
 def client(root_folder):

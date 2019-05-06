@@ -31,67 +31,6 @@ class ExportTask(object):
         print('Done')
 
 
-class RemoveTask(object):
-
-    def execute(self, args):
-        print('Running remove task...')
-        path = os.path.join(args['root_folder'], args['path'])
-
-        if not os.path.exists(path):
-            logging.error('Provided path %s does not exist', path)
-            return
-
-        item = filesystem.loader(args['root_folder']).load_from_path(path)
-        if item:
-            zendesk.remover(args['company_uri'], args['user'], args['password']).remove(item)
-            filesystem.remover(args['root_folder']).remove(item)
-            print('Done')
-        else:
-            logging.error('Path provided not a valid category, section or article')
-
-
-class MoveTask(object):
-
-    def execute(self, args):
-        print('Running move task...')
-        src = os.path.join(args['root_folder'], args['source'])
-        dest = os.path.join(args['root_folder'], args['destination'])
-
-        if not os.path.exists(src):
-            logging.error('Provided source %s does not exist', src)
-            return
-        if os.path.exists(dest):
-            logging.error('Provided destination %s already exist', dest)
-            return
-
-        item = filesystem.loader(args['root_folder']).load_from_path(src)
-        if item:
-            zendesk.mover(args['company_uri'], args['user'], args['password'], args['image_cdn']).move(dest)
-            filesystem.mover(args['root_folder']).move(item, dest)
-            print('Done')
-        else:
-            logging.error('Path provided not a valid category, section or article')
-        
-
-
-class DoctorTask(object):
-
-    def execute(self, args):
-        print('Running doctor task...')
-        categories = filesystem.loader(args['root_folder']).load()
-        filesystem_client = filesystem.client(args['root_folder'])
-        filesystem_doctor = filesystem.doctor(args['root_folder'])
-        zendesk_doctor = zendesk.doctor(
-            args['company_uri'], args['user'], args['password'], filesystem_client, args['force'])
-
-        zendesk_doctor.fix(categories)
-        filesystem_doctor.fix(categories)
-
-        filesystem.saver(args['root_folder']).save(categories)
-
-        print('Done')
-
-
 class ConfigTask(object):
 
     """
@@ -148,9 +87,6 @@ class ConfigTask(object):
 tasks = {
     'import': ImportTask(),
     'export': ExportTask(),
-    'remove': RemoveTask(),
-    'move': MoveTask(),
-    'doctor': DoctorTask(),
     'config': ConfigTask()
 }
 

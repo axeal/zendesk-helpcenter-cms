@@ -108,18 +108,3 @@ A sections is very similar to category except it holds articles. Everything else
 Each article has a separate folder with a slugified directory name. This folder contains the article body in the markdown file `README.md`, plus the article title in `__article__.json`.
 
 Once an article is in Zendesk it will also have a meta file. This file stores information from Zendesk and is for internal use by the script.
-
-## Commands
-
-### Removing items
-
-```
-zendesk-help-cms remove  "path/to/article.md"
-zendesk-help-cms remove "category"
-```
-
-It will remove files locally and from Zendesk. It will not remove categories/sections together with articles even if they are empty, it has to be done separately from removing articles. Removing category/section will remove everything in it.
-
-### Fixing missing files
-
-If you want you can create categories/sections/articles by hand. Instead of creating all necessary files you can create folders for categories/sections and the  markdown file for the article. To create missing files run `zendesk-help-cms doctor`. It will create files with default names (directory/)
