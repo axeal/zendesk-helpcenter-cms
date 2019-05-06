@@ -50,6 +50,9 @@ category/
 				README.md
 				__article__.json
 				.article.meta
+				attachments/
+					attachment-one.png
+					.attachment-one.png.meta
 ```
 
 ### Uploading translations to Zendesk
@@ -75,9 +78,12 @@ category/
 				README.md
 				__article__.json
 				.article.meta
+				attachments/
+					attachment-one.png
+					.attachment-one.png.meta
 ```
 
-There are 3 kinds of objects: categories, sections and articles.
+There are 3 kinds of objects: categories, sections, articles and attachments.
 
 ### Categories
 
@@ -103,3 +109,13 @@ A sections is very similar to category except it holds articles. Everything else
 Each article has a separate folder with a slugified directory name. This folder contains the article body in the markdown file `README.md`, plus the article title in `__article__.json`.
 
 Once an article is in Zendesk it will also have a meta file. This file stores information from Zendesk and is for internal use by the script.
+
+### Attachments
+
+Attachments for an article are placed in the attachments directory under the article directory. Attachments may not be larger than 20MB.
+
+Attachments can be referenced as links/in-line images in the article body `README.md` with the regular markdown in-line syntax, i.e. an image can be added with `![Alt text](/attachments/attachment-one.png)` or as a link `[Link text](/attachments/attachment-two.png)`. The location will be automatically updated with the URL of the attachment in zendesk after it has been uploaded.
+
+If an attachment in the attachments folder is updated after initial upload, this will also be reflected upon next export.
+
+Once an attachment is in Zendesk it will also have a meta file. This file stores information from Zendesk and is for internal use by the script.
