@@ -1,8 +1,9 @@
 import unicodedata
 import re
+import hashlib
 
 IMAGE_CDN_PATTERN = r'(!\[.*?\]\()\$IMAGE_ROOT(.*?(?:\s?\".*?\")?\))'
-
+BLOCKSIZE = 65536
 
 def slugify(value):
     """
@@ -28,3 +29,12 @@ def to_iso_locale(locale):
         return first + '-' + second.upper()
     else:
         return locale
+
+def md5_hash(path):
+    hasher = hashlib.md5()
+    with open(path, 'rb') as f:
+        buf = f.read(BLOCKSIZE)
+        while len(buf) > 0:
+            hasher.update(buf)
+            buf = f.read(BLOCKSIZE)
+    return hasher.hexdigest()

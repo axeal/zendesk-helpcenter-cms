@@ -6,6 +6,7 @@ import re
 import shutil
 
 import model
+import utils
 
 
 class FilesystemClient(object):
@@ -105,9 +106,10 @@ class Saver(object):
         self.fs.save_yaml(item.content_filepath, item.to_content())
 
     def _save_attachment(self, attachment):
-        self.fs.save_json(attachment.meta_filepath, attachment.meta)
         attachment_path = self.fs.path_for(attachment.filepath)
         self.zd.get_attachment(attachment.meta['relative_path'], attachment_path)
+        attachment.meta['md5_hash'] = utils.md5_hash(attachment_path)
+        self.fs.save_json(attachment.meta_filepath, attachment.meta)
 
     def save(self, categories):
         for category in categories:

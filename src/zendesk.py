@@ -95,9 +95,9 @@ class ZendeskRequest(object):
             url = self.items_url.format(item.zendesk_group)
         return self._send_request(requests.post, url, data).get(item.zendesk_name, {})
 
-    def post_attachment(self, attachment, content):
+    def post_attachment(self, attachment, attachment_filepath):
         full_url = self._url_for(attachment.new_item_url)
-        data = {'inline': 'true', 'file': content}
+        data = {'inline': 'true', 'file': open(attachment_filepath, 'rb')}
         response = requests.post(full_url, data,
                               auth=(self.user, self.password),
                               verify=False)
@@ -196,18 +196,33 @@ class Pusher(object):
         else:
             print('Nothing changed')
 
-
-    def _disable_article_comments(self, article):
-        data = {
-            'comments_disabled': True
-        }
-        self.req.put(article, data)
-
     def _push(self, item, parent=None):
         if not item.zendesk_id:
             self._push_new_item(item, parent)
         else:
             self._push_item_translation(item)
+
+    def _has_attachment_changed(self, attachment):
+        attachment_full_path = self.fs.path_for(attachment.filepath)
+        attachment_md5_hash = utils.md5_hash(attachment_full_path)
+        if attachment_md5_hash == attachment.meta['md5_hash']:
+            return False
+        return True
+
+    def _push_new_attachment(self, attachment):
+        attachment_full_path = self.fs.path_for(attachment.filepath)
+        meta = self.req.post_attachment(attachment, attachment_full_path)
+        attachment_md5_hash = utils.md5_hash(attachment_full_path)
+        meta['md5_hash'] = attachment_md5_hash
+        meta = self.fs.save_json(attachment.meta_filepath, meta)
+        attachment.meta = meta
+    
+    def _push_attachment(self, attachment):
+        if not attachment.zendesk_id:
+            self._push_new_attachment(attachment)
+        elif self._has_attachment_changed(attachment):
+            self.req.delete(attachment)
+            self._push_new_attachment(attachment)
 
     def push(self, categories):
         for category in categories:
@@ -217,10 +232,11 @@ class Pusher(object):
                 print('Pushing section %s' % section.name)
                 self._push(section, category)
                 for article in section.articles:
+                    print('Pushing attachments for article %s' % article.name)
+                    for _, attachment in article.attachments.items():
+                        self._push_attachment(attachment)
                     print('Pushing article %s' % article.name)
                     self._push(article, section)
-                    if self.disable_comments:
-                        self._disable_article_comments(article)
 
 
 class RecordNotFoundError(Exception):
