@@ -13,75 +13,22 @@ CONFIG_FILE = 'zendesk-help-cms.config'
 class ImportTask(object):
 
     def execute(self, args):
-        print('Running import task...')
+        logging.info('Running import task...')
         categories = zendesk.fetcher(args['company_uri'], args['user'], args['password']).fetch()
-        filesystem.saver(args['root_folder']).save(categories)
-        print('Done')
+        zendesk_client = zendesk.ZendeskRequest(args['company_uri'], args['user'], args['password'], args['public_uri'])
+        filesystem.saver(args['root_folder'], zendesk_client).save(categories)
+        logging.info('Import task completed')
 
 
 class ExportTask(object):
 
     def execute(self, args):
-        print('Running export task...')
+        logging.info('Running export task...')
         categories = filesystem.loader(args['root_folder']).load()
         filesystem_client = filesystem.client(args['root_folder'])
         zendesk.pusher(args['company_uri'], args['user'], args['password'],
-                       filesystem_client, args['image_cdn'], args['disable_article_comments']).push(categories)
-        print('Done')
-
-
-class RemoveTask(object):
-
-    def execute(self, args):
-        print('Running remove task...')
-        path = os.path.join(args['root_folder'], args['path'])
-
-        if not os.path.exists(path):
-            logging.error('Provided path %s does not exist', path)
-            return
-
-        item = filesystem.loader(args['root_folder']).load_from_path(path)
-        zendesk.remover(args['company_uri'], args['user'], args['password']).remove(item)
-        filesystem.remover(args['root_folder']).remove(item)
-        print('Done')
-
-
-class MoveTask(object):
-
-    def execute(self, args):
-        print('Running move task...')
-        src = os.path.join(args['root_folder'], args['source'])
-        dest = os.path.join(args['root_folder'], args['destination'])
-
-        if not os.path.exists(src):
-            logging.error('Provided source %s does not exist', src)
-            return
-        if os.path.exists(dest):
-            logging.error('Provided destination %s already exist', dest)
-            return
-
-        item = filesystem.loader(args['root_folder']).load_from_path(src)
-        zendesk.mover(args['company_uri'], args['user'], args['password'], args['image_cdn']).move(dest)
-        filesystem.mover(args['root_folder']).move(item, dest)
-        print('Done')
-
-
-class DoctorTask(object):
-
-    def execute(self, args):
-        print('Running doctor task...')
-        categories = filesystem.loader(args['root_folder']).load()
-        filesystem_client = filesystem.client(args['root_folder'])
-        filesystem_doctor = filesystem.doctor(args['root_folder'])
-        zendesk_doctor = zendesk.doctor(
-            args['company_uri'], args['user'], args['password'], filesystem_client, args['force'])
-
-        zendesk_doctor.fix(categories)
-        filesystem_doctor.fix(categories)
-
-        filesystem.saver(args['root_folder']).save(categories)
-
-        print('Done')
+                       filesystem_client, args['disable_article_comments']).push(categories)
+        logging.info('Export task completed')
 
 
 class ConfigTask(object):
@@ -107,8 +54,6 @@ class ConfigTask(object):
             user = input('Zendesk\'s user name ({}):'.format(default_user)) or default_user
             default_password = default_config.get('password', '')
             password = input('Zendesk\'s password ({}):'.format(default_password)) or default_password
-            default_image_cdn = default_config.get('image_cdn', '')
-            image_cdn = input('CDN path for storing images ({}):'.format(default_image_cdn)) or default_image_cdn
             default_disable_article_comments = default_config.get('disable_article_comments', '')
             disable_article_comments = input('Disable article comments ({}):'.format(default_disable_article_comments))
             disable_article_comments = disable_article_comments or default_disable_article_comments
@@ -116,14 +61,12 @@ class ConfigTask(object):
             company_uri = input('Zendesk\'s company uri:')
             user = input('Zendesk\'s user name:')
             password = input('Zendesk\'s password:')
-            image_cdn = input('CDN path for storing images:')
             disable_article_comments = input('Disable article comments:')
 
         return {
             'company_uri': company_uri,
             'user': user,
             'password': password,
-            'image_cdn': image_cdn,
             'disable_article_comments': disable_article_comments
         }
 
@@ -140,9 +83,6 @@ class ConfigTask(object):
 tasks = {
     'import': ImportTask(),
     'export': ExportTask(),
-    'remove': RemoveTask(),
-    'move': MoveTask(),
-    'doctor': DoctorTask(),
     'config': ConfigTask()
 }
 
@@ -152,7 +92,8 @@ def parse_args():
 
     # Subparsers
     subparsers = parser.add_subparsers(help='Task to be performed.', dest='task')
-    task_parsers = {task_parser: subparsers.add_parser(task_parser) for task_parser in tasks}
+    for task_parser in tasks:
+        subparsers.add_parser(task_parser)
 
     # Global settings
     parser.add_argument('-l', '--loglevel',
@@ -165,12 +106,6 @@ def parse_args():
     parser.add_argument('-f', '--force', help='Don\'t ask questions. YES all the way',
                         action='store_true', default=False)
     parser.add_argument('-v', '--version', help='Show version', action='store_true')
-
-    # Task subparser settings
-    task_parsers['remove'].add_argument('path',
-                                        help='Set path for removing an item. The path is relative to the root folder')
-    task_parsers['move'].add_argument('source', help='Set source section/article')
-    task_parsers['move'].add_argument('destination', help='Set destination category/section')
 
     return parser.parse_args()
 
@@ -185,7 +120,6 @@ def parse_config(args):
     config.read(CONFIG_FILE)
     options = dict(config[config.default_section])
     options.update(vars(args))
-    options['image_cdn'] = options.get('image_cdn', '')
     options['disable_article_comments'] = bool(options.get('disable_article_comments', False))
     return options
 

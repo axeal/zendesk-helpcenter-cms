@@ -1,8 +1,8 @@
 import unicodedata
 import re
+import hashlib
 
-IMAGE_CDN_PATTERN = r'(!\[.*?\]\()\$IMAGE_ROOT(.*?(?:\s?\".*?\")?\))'
-
+BLOCKSIZE = 65536
 
 def slugify(value):
     """
@@ -12,10 +12,6 @@ def slugify(value):
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
     value = re.sub(r'[^\w\s-]', '', value).strip().lower()
     return re.sub(r'[-\s]+', '-', value)
-
-
-def convert_to_cdn_path(cdn_path, body):
-    return re.sub(IMAGE_CDN_PATTERN, '\\1{}\\2'.format(cdn_path), body)
 
 
 def to_zendesk_locale(locale):
@@ -28,3 +24,12 @@ def to_iso_locale(locale):
         return first + '-' + second.upper()
     else:
         return locale
+
+def md5_hash(path):
+    hasher = hashlib.md5()
+    with open(path, 'rb') as f:
+        buf = f.read(BLOCKSIZE)
+        while len(buf) > 0:
+            hasher.update(buf)
+            buf = f.read(BLOCKSIZE)
+    return hasher.hexdigest()

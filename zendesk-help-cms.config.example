@@ -4,12 +4,12 @@
 # Zendesk company name
 company_uri = testingzendesk12.zendesk.com
 
+# External company name
+external_uri = testingzendesk12public.zendesk.com
+
 # Zendesk user name and password (or token)
 user = zendesk@maildrop.cc/token
 password = i8wZBLnQLjbPVS5darEBPpVOChX99R1IJEFJUlBJ
-
-# Image CDN root url (optional)
-image_cdn = 'http://my.cdn.io/images'
 
 # Disable article comments by default (optional) 0 - no, 1 - yes
 disable_article_comments = 1

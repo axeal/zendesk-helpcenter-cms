@@ -1,14 +1,11 @@
-zendesk-helpcenter-cms [![Build Status](https://travis-ci.org/KeepSafe/zendesk-helpcenter-cms.svg)](https://travis-ci.org/KeepSafe/zendesk-helpcenter-cms)
 ===================
 
-Python script for zendesk helpcenter translations.
+Python script for zendesk helpcenter synchronisation.
 
 ## Requirements
 
 1. Python 3.+
-2. [WebTranslateIt](https://webtranslateit.com) APIKey
-3. [Zendesk](www.zendesk.com) Account
-4. [wti](https://webtranslateit.com/en/tour/external_tools) command line tool from WebTranslateIt
+2. [Zendesk](www.zendesk.com) Account
 
 ## Installation
 
@@ -49,36 +46,22 @@ category/
 	section/
 		__group__.json
 		.group.meta
-		en-us/
-			title.md
-			title.json
-			.article_title.meta
+			article-title/
+				README.md
+				__article__.json
+				.article.meta
+				attachments/
+					attachment-one.png
+					.attachment-one.png.meta
 ```
-
-### Uploading articles to WebTranslateIt
-
-Since we have the articles in Markdown in the main language we can now upload them to WebTranslateIt for translation. You can either use [wti](https://webtranslateit.com/en/tour/external_tools) command line tool provided by WebTranslateIt or simply run:
-
-`zendesk-help-cms translate`
-
-It will upload the articles to WebTranslateIt. From this point the interaction with WebTranslateIt should be done through `wti`. This includes downloading translated content, uploading new content, updating existing content and so on.
 
 ### Uploading translations to Zendesk
 
-When the translations are ready run:
-
-`wti pull`
-
-This will download all translations to the local folder with existing articles. To upload everything to Zendesk run
+To upload content to Zendesk run
 
 `zendesk-help-cms export`
 
 This will upload the **entire** structure to Zendesk updating whatever is already there if it changed (this is checked by comparing md5 hashes of the title and body/description)
-
-**Important: ** 
-*For uploading images use `![Alt name]($IMAGE_ROOT/images/image.png)`. The `IMAGE_ROOT` will be replaced by `image_cdn` from the configuration.
-
-To disable comments in article you need to edit the meta file `.article-[article_name].meta` and edit `comments_disabled` filed.
 
 ## Structure
 
@@ -91,13 +74,16 @@ category/
 	section/
 		__group__.json
 		.group.meta
-		en-us/
-			title.md
-			title.json
-			.article_title.meta
+			article-title/
+				README.md
+				__article__.json
+				.article.meta
+				attachments/
+					attachment-one.png
+					.attachment-one.png.meta
 ```
 
-There are 3 kinds of objects: categories, sections and articles.
+There are 3 kinds of objects: categories, sections, articles and attachments.
 
 ### Categories
 
@@ -110,8 +96,6 @@ A category is a top level group, it holds sections. Each category had a `__group
 }
 ```
 
-This file will be translated giving you variants like `__group__.fr.json` for different languages. To change category name or description simply edit this file.
-
 The file needs to be created when you add a new category, either by hand or by running `zendesk-help-cms doctor`.
 
 Once a category is in Zendesk help centre it will also have `.group.meta` file containing the information from Zendesk. This file should not be edited and is for internal use only.
@@ -122,29 +106,16 @@ A sections is very similar to category except it holds articles. Everything else
 
 ### Articles
 
-Each article has a separate Markdown file with the name being the article's name in the help centre (!!! this needs to change as names must be translated !!!). The content of the markdown file is the body of the article.
+Each article has a separate folder with a slugified directory name. This folder contains the article body in the markdown file `README.md`, plus the article title in `__article__.json`.
 
 Once an article is in Zendesk it will also have a meta file. This file stores information from Zendesk and is for internal use by the script.
 
-## Commands
+### Attachments
 
-### Creating new items
+Attachments for an article are placed in the attachments directory under the article directory. Attachments may not be larger than 20MB.
 
-```
-zendesk-help-cms add "path/to/article.md"
-```
+Attachments can be referenced as links/in-line images in the article body `README.md` with the regular markdown in-line syntax, i.e. an image can be added with `![Alt text](/attachments/attachment-one.png)` or as a link `[Link text](/attachments/attachment-two.png)`. The location will be automatically updated with the URL of the attachment in zendesk after it has been uploaded.
 
-It will create any necessary files. It won't upload the content anywhere. If you want to upload the content to Zendesk use `export` task. If you want to upload the content to WebTranslateIt use `wti`
+If an attachment in the attachments folder is updated after initial upload, this will also be reflected upon next export.
 
-### Removing items
-
-```
-zendesk-help-cms remove  "path/to/article.md"
-zendesk-help-cms remove "category"
-```
-
-It will remove files locally and from Zendesk and WebTranslateIt. It will not remove categories/sections together with articles even if they are empty, it has to be done separately from removing articles. Removing category/section will remove everything in it.
-
-### Fixing missing files
-
-If you want you can create categories/sections/articles by hand. Instead of creating all necessary files you can create folders for categories/sections and the  markdown file for the article. To create missing files run `zendesk-help-cms doctor`. It will create files with default names (directory/)
+Once an attachment is in Zendesk it will also have a meta file. This file stores information from Zendesk and is for internal use by the script.

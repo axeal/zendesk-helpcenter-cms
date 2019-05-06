@@ -1,9 +1,9 @@
 import logging
 import requests
 import json
-import html2text
 import hashlib
 from operator import attrgetter
+import os
 
 import model
 import utils
@@ -19,15 +19,15 @@ class ZendeskRequest(object):
     items_url = '{}.json?per_page=100'
     items_in_group_url = '{}/{}/{}.json?per_page=100'
 
+    attachment_url = 'articles/attachments/{}.json'
     translation_url = '{}/{}/translations/{}.json'
-    translations_url = '{}/{}/translations.json?per_page=100'
-    missing_translations_url = '{}/{}/translations/missing.json'
 
-    def __init__(self, company_uri, user, password):
+    def __init__(self, company_uri, user, password, public_uri=None):
         super().__init__()
         self.company_uri = company_uri
         self.user = user
         self.password = password
+        self.public_uri = public_uri
 
     def _url_for(self, path):
         return self._default_url.format(self.company_uri, path)
@@ -73,16 +73,10 @@ class ZendeskRequest(object):
             url = self.items_url.format(item.zendesk_group)
         full_url = self._url_for(url)
         response = requests.get(full_url, auth=(self.user, self.password), verify=False)
-        return self._parse_response(response).get(item.zendesk_group, {})
+        return self._parse_response(response).get(item.zendesk_group_list_prefix + item.zendesk_group, {})
 
-    def get_missing_locales(self, item):
-        url = self.missing_translations_url.format(item.zendesk_group, item.zendesk_id)
-        full_url = self._translation_url_for(url)
-        response = requests.get(full_url, auth=(self.user, self.password), verify=False)
-        return self._parse_response(response).get('locales', [])
-
-    def get_translation(self, item, locale):
-        url = self.translation_url.format(item.zendesk_group, item.zendesk_id, locale)
+    def get_translation(self, item):
+        url = self.translation_url.format(item.zendesk_group, item.zendesk_id, model.DEFAULT_LOCALE)
         full_url = self._translation_url_for(url)
         response = requests.get(full_url, auth=(self.user, self.password), verify=False)
         return self._parse_response(response).get('translation', {})
@@ -91,8 +85,8 @@ class ZendeskRequest(object):
         url = self.item_url.format(item.zendesk_group, item.zendesk_id)
         return self._send_request(requests.put, url, data).get(item.zendesk_name, {})
 
-    def put_translation(self, item, locale, data):
-        url = self.translation_url.format(item.zendesk_group, item.zendesk_id, locale)
+    def put_translation(self, item, data):
+        url = self.translation_url.format(item.zendesk_group, item.zendesk_id, model.DEFAULT_LOCALE)
         return self._send_translation(requests.put, url, data).get('translation', {})
 
     def post(self, item, data, parent=None):
@@ -102,12 +96,32 @@ class ZendeskRequest(object):
             url = self.items_url.format(item.zendesk_group)
         return self._send_request(requests.post, url, data).get(item.zendesk_name, {})
 
-    def post_translation(self, item, data):
-        url = self.translations_url.format(item.zendesk_group, item.zendesk_id)
-        return self._send_translation(requests.post, url, data).get('translation', {})
+    def post_attachment(self, attachment, attachment_filepath):
+        full_url = self._url_for(attachment.new_item_url)
+        response = requests.post(full_url, 
+                              data={'inline': 'true'},
+                              files={'file': open(attachment_filepath, 'rb')},
+                              auth=(self.user, self.password),
+                              verify=False)
+        return self._parse_response(response)
+
+    def get_attachment(self, relative_path, path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        url = 'https://' + self.public_uri + relative_path
+        response = requests.get(url, stream=True, auth=(self.user, self.password))
+        if response.status_code == 200:
+            with open(path, 'wb') as file:
+                for chunk in response:
+                    file.write(chunk)
+            return True
+        else:
+            return False
 
     def delete(self, item):
-        url = self.item_url.format(item.zendesk_group, item.zendesk_id)
+        if item.zendesk_name == 'attachment':
+            url = self.attachment_url.format(item.zendesk_id)
+        else:
+            url = self.item_url.format(item.zendesk_group, item.zendesk_id)
         full_url = self._url_for(url)
         return self.raw_delete(full_url)
 
@@ -141,31 +155,29 @@ class Fetcher(object):
                 zendesk_articles = self.req.get_items(model.Article, section)
                 category.sections.append(section)
                 for zendesk_article in zendesk_articles:
-                    zendesk_body = zendesk_article.get('body', '')
-                    if zendesk_body == None:
-                        body = ''
-                    else:
-                        body = html2text.html2text(zendesk_body)
-                    article_filename = utils.slugify(zendesk_article['title'])
-                    article = model.Article(section, zendesk_article['title'], body, article_filename)
+                    article = model.Article.from_zendesk(zendesk_article, section)
                     print('Article %s created' % article.name)
-                    article.meta = zendesk_article
+                    zendesk_attachments = self.req.get_items(model.Attachment, article)
                     section.articles.append(article)
+                    for zendesk_attachment in zendesk_attachments:
+                        attachment = model.Attachment(article, zendesk_attachment['file_name'])
+                        attachment.meta = zendesk_attachment
+                        article.attachments[attachment.filename] = attachment
         return categories
 
 
 class Pusher(object):
 
-    def __init__(self, req, fs, image_cdn, disable_comments):
+    def __init__(self, req, fs, disable_comments):
         self.req = req
         self.fs = fs
-        self.image_cdn = image_cdn
         self.disable_comments = disable_comments
 
-    def _has_content_changed(self, translation, item, locale):
-        zendesk_content = self.req.get_translation(item, locale)
+    def _has_content_changed(self, translation, item):
+        zendesk_content = self.req.get_translation(item)
         for key in translation:
             zendesk_body = zendesk_content.get(key, '')
+            zendesk_body = '' if zendesk_body == None else zendesk_body
             zendesk_hash = hashlib.md5(zendesk_body.encode('utf-8'))
             item_hash = hashlib.md5(translation[key].encode('utf-8'))
             if zendesk_hash.hexdigest() != item_hash.hexdigest():
@@ -173,156 +185,88 @@ class Pusher(object):
         return False
 
     def _push_new_item(self, item, parent=None):
-        data = {item.zendesk_name: item.to_dict(self.image_cdn)}
+        data = {item.zendesk_name: item.to_dict()}
         meta = self.req.post(item, data, parent)
         meta = self.fs.save_json(item.meta_filepath, meta)
         item.meta = meta
 
     def _push_item_translation(self, item):
-        locale = model.DEFAULT_LOCALE
-        translation = item.to_translation(self.image_cdn)
-        translation['locale'] = locale
-        if self._has_content_changed(translation, item, locale):
+        translation = item.to_translation()
+        if self._has_content_changed(translation, item):
+            print('Updating translation')
             data = {'translation': translation}
-            print('Updating translation for locale {}'.format(translation.locale))
-            self.req.put_translation(item, locale, data)
+            self.req.put_translation(item, data)
         else:
-            print('Nothing changed for locale {}'.format(translation.locale))
+            print('Nothing changed')
 
-
-    def _disable_article_comments(self, article):
-        data = {
-            'comments_disabled': True
-        }
-        self.req.put(article, data)
-
-    def _push(self, item, parent=None):
+    def _push_group(self, item, parent=None):
         if not item.zendesk_id:
             self._push_new_item(item, parent)
         else:
             self._push_item_translation(item)
 
-    def push(self, categories):
-        for category in categories:
-            print('Pushing category %s' % category.name)
-            self._push(category)
-            for section in category.sections:
-                print('Pushing section %s' % section.name)
-                self._push(section, category)
-                for article in section.articles:
-                    print('Pushing article %s' % article.name)
-                    self._push(article, section)
-                    if self.disable_comments:
-                        self._disable_article_comments(article)
-
-
-class Remover(object):
-
-    def __init__(self, req):
-        self.req = req
-
-    def remove(self, item):
-        if item.zendesk_id:
-            self.req.delete(item)
-
-
-class Mover(object):
-
-    def __init__(self, req, image_cdn):
-        self.req = req
-        self.image_cdn = image_cdn
-
-    def move(self, item):
-        self.req.put(item)
-
-
-class Doctor(object):
-
-    def __init__(self, req, fs, force=False):
-        self.req = req
-        self.fs = fs
-        self.force = force
-
-    def _merge_items(self, zendesk_items):
-        if self.force:
-            print('There are {} entries with the same name {}, this should be an error. Since the command was run '
-                  'with --force option enabled every entry except the oldest will be removed'.format(
-                      len(zendesk_items), zendesk_items[0]['name']))
-            sorted_items = sorted(zendesk_items, key=attrgetter('updated_at'))
-            for item in sorted_items[:-1]:
-                print('removing item with id: {}'.format(item['id']))
-                self.req.raw_delete(item['url'])
-            return sorted_items[0]
-        else:
-            print('There are {} entries with the same name {}:'.format(len(zendesk_items), zendesk_items[0]['name']))
-            for idx, item in enumerate(zendesk_items):
-                print('{}. created: {}, updated: {}, link: {}'.format(idx + 1, item['created_at'], item['updated_at'], item['html_url']))
-            article_nr = int(input('Pick a number you wish to keep or 0 to keep all of them: '))
-
-            if article_nr == 0 or article_nr > len(zendesk_items) + 1:
-                return zendesk_items[0]
-
-            for idx, item in enumerate(zendesk_items):
-                if not article_nr == idx + 1:
-                    print('removing item with id: {}'.format(item['id']))
-                    self.req.raw_delete(item['url'])
-            return zendesk_items[article_nr - 1]
-
-    def _fetch_item(self, item, parent=None):
-        zendesk_items = self.req.get_items(item, parent)
-        named_items = list(filter(lambda i: i['name'] == item.name, zendesk_items))
-        if len(named_items) > 1:
-            return self._merge_items(named_items)
-        if len(named_items) == 1:
-            return named_items[0]
-        return {}
-
-    def _exists(self, item):
-        try:
-            self.req.get_item(item)
-        except RecordNotFoundError:
+    def _has_article_body_changed(self, article):
+        article_body_full_path = self.fs.path_for(article.body_filepath)
+        article_md5_hash = utils.md5_hash(article_body_full_path)
+        if article_md5_hash == article.meta.get('md5_hash', ''):
             return False
         return True
 
-    def _fix_item(self, item, parent=None):
-        # parent is a new item so this is a new item as well
-        if parent and not parent.zendesk_id:
-            if item.zendesk_id:
-                logging.warning('Parent is a new item but Zendesk ID exists. Removing meta...')
-            self.fs.remove(item.meta_filepath)
-            item.meta = {}
-            return
+    def _push_new_article_translation(self, article):
+        translation = article.to_translation_incl_body()
+        data = {'translation': translation}
+        self.req.put_translation(article, data)
+        article_body_full_path = self.fs.path_for(article.body_filepath)
+        article_md5_hash = utils.md5_hash(article_body_full_path)
+        article.meta['md5_hash'] = article_md5_hash
+        article.meta = self.fs.save_json(article.meta_filepath, article.meta)
 
-        try:
-            zendesk_item = self._fetch_item(item, parent)
-            if item.zendesk_id:
-                if zendesk_item and zendesk_item.get('id') != item.zendesk_id:
-                    print('Zendesk ID is incorrect but found item with the same name {}.'
-                          ' If this is not corrent you need to fix it manually'.format(item.name))
-                    item.meta = zendesk_item
-                    self.fs.save_json(item.meta_filepath, zendesk_item)
-                elif not zendesk_item:
-                    print('Zendesk ID is incorrect and no item with the same name'
-                          ' was found for name {}. Assuming new item'.format(item.name))
-                    self.fs.remove(item.meta_filepath)
-                    item.meta = {}
-            else:
-                if zendesk_item:
-                    print('Zendesk ID is missing but found item with the same name {}.'
-                          ' If this is not correct you need to fix it manually'.format(item.name))
-                    item.meta = zendesk_item
-                    self.fs.save_json(item.meta_filepath, zendesk_item)
+    def _push_article(self, article, section, attachments_changed):
+        if attachments_changed or self._has_article_body_changed(article):
+            self._push_new_article_translation(article)
 
-        except RecordNotFoundError as e:
-            logging.warning(str(e))
+    def _has_attachment_changed(self, attachment):
+        attachment_full_path = self.fs.path_for(attachment.filepath)
+        attachment_md5_hash = utils.md5_hash(attachment_full_path)
+        if attachment_md5_hash == attachment.meta.get('md5_hash', ''):
+            return False
+        return True
 
-    def fix(self, categories):
+    def _push_new_attachment(self, attachment):
+        attachment_full_path = self.fs.path_for(attachment.filepath)
+        meta = self.req.post_attachment(attachment, attachment_full_path)['article_attachment']
+        attachment_md5_hash = utils.md5_hash(attachment_full_path)
+        meta['md5_hash'] = attachment_md5_hash
+        meta = self.fs.save_json(attachment.meta_filepath, meta)
+        attachment.meta = meta
+    
+    def _push_attachment(self, attachment):
+        if not attachment.zendesk_id:
+            self._push_new_attachment(attachment)
+            return True
+        elif self._has_attachment_changed(attachment):
+            self.req.delete(attachment)
+            self._push_new_attachment(attachment)
+            return True
+        return False
+
+    def push(self, categories):
         for category in categories:
-            self._fix_item(category)
+            print('Pushing category %s' % category.name)
+            self._push_group(category)
             for section in category.sections:
-                self._fix_item(section, section.category)
+                print('Pushing section %s' % section.name)
+                self._push_group(section, category)
                 for article in section.articles:
-                    self._fix_item(article, article.section)
+                    if not article.zendesk_id:
+                        self._push_new_item(article, section)
+                    print('Pushing attachments for article %s' % article.name)
+                    attachments_changed = False
+                    for _, attachment in article.attachments.items():
+                        if self._push_attachment(attachment):
+                            attachments_changed = True
+                    print('Pushing article %s' % article.name)
+                    self._push_article(article, section, attachments_changed)
 
 
 class RecordNotFoundError(Exception):
@@ -333,22 +277,6 @@ def fetcher(company_uri, user, password):
     req = ZendeskRequest(company_uri, user, password)
     return Fetcher(req)
 
-
-def pusher(company_uri, user, password, fs, image_cdn, disable_comments):
+def pusher(company_uri, user, password, fs, disable_comments):
     req = ZendeskRequest(company_uri, user, password)
-    return Pusher(req, fs, image_cdn, disable_comments)
-
-
-def remover(company_uri, user, password):
-    req = ZendeskRequest(company_uri, user, password)
-    return Remover(req)
-
-
-def mover(company_uri, user, password, image_cdn):
-    req = ZendeskRequest(company_uri, user, password)
-    return Mover(req, image_cdn)
-
-
-def doctor(company_uri, user, password, fs, force):
-    req = ZendeskRequest(company_uri, user, password)
-    return Doctor(req, fs, force)
+    return Pusher(req, fs, disable_comments)
