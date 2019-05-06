@@ -3,6 +3,7 @@ import requests
 import json
 import hashlib
 from operator import attrgetter
+import os
 
 import model
 import utils
@@ -97,13 +98,15 @@ class ZendeskRequest(object):
 
     def post_attachment(self, attachment, attachment_filepath):
         full_url = self._url_for(attachment.new_item_url)
-        data = {'inline': 'true', 'file': open(attachment_filepath, 'rb')}
-        response = requests.post(full_url, data,
+        response = requests.post(full_url, 
+                              data={'inline': 'true'},
+                              files={'file': open(attachment_filepath, 'rb')},
                               auth=(self.user, self.password),
                               verify=False)
         return self._parse_response(response)
 
     def get_attachment(self, relative_path, path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         url = 'https://' + self.public_uri + relative_path
         response = requests.get(url, stream=True, auth=(self.user, self.password))
         if response.status_code == 200:
@@ -165,16 +168,16 @@ class Fetcher(object):
 
 class Pusher(object):
 
-    def __init__(self, req, fs, image_cdn, disable_comments):
+    def __init__(self, req, fs, disable_comments):
         self.req = req
         self.fs = fs
-        self.image_cdn = image_cdn
         self.disable_comments = disable_comments
 
     def _has_content_changed(self, translation, item):
         zendesk_content = self.req.get_translation(item)
         for key in translation:
             zendesk_body = zendesk_content.get(key, '')
+            zendesk_body = '' if zendesk_body == None else zendesk_body
             zendesk_hash = hashlib.md5(zendesk_body.encode('utf-8'))
             item_hash = hashlib.md5(translation[key].encode('utf-8'))
             if zendesk_hash.hexdigest() != item_hash.hexdigest():
@@ -182,13 +185,13 @@ class Pusher(object):
         return False
 
     def _push_new_item(self, item, parent=None):
-        data = {item.zendesk_name: item.to_dict(self.image_cdn)}
+        data = {item.zendesk_name: item.to_dict()}
         meta = self.req.post(item, data, parent)
         meta = self.fs.save_json(item.meta_filepath, meta)
         item.meta = meta
 
     def _push_item_translation(self, item):
-        translation = item.to_translation(self.image_cdn)
+        translation = item.to_translation()
         if self._has_content_changed(translation, item):
             print('Updating translation')
             data = {'translation': translation}
@@ -196,22 +199,42 @@ class Pusher(object):
         else:
             print('Nothing changed')
 
-    def _push(self, item, parent=None):
+    def _push_group(self, item, parent=None):
         if not item.zendesk_id:
             self._push_new_item(item, parent)
         else:
             self._push_item_translation(item)
 
+    def _has_article_body_changed(self, article):
+        article_body_full_path = self.fs.path_for(article.body_filepath)
+        article_md5_hash = utils.md5_hash(article_body_full_path)
+        if article_md5_hash == article.meta.get('md5_hash', ''):
+            return False
+        return True
+
+    def _push_new_article_translation(self, article):
+        translation = article.to_translation_incl_body()
+        data = {'translation': translation}
+        self.req.put_translation(article, data)
+        article_body_full_path = self.fs.path_for(article.body_filepath)
+        article_md5_hash = utils.md5_hash(article_body_full_path)
+        article.meta['md5_hash'] = article_md5_hash
+        article.meta = self.fs.save_json(article.meta_filepath, article.meta)
+
+    def _push_article(self, article, section, attachments_changed):
+        if attachments_changed or self._has_article_body_changed(article):
+            self._push_new_article_translation(article)
+
     def _has_attachment_changed(self, attachment):
         attachment_full_path = self.fs.path_for(attachment.filepath)
         attachment_md5_hash = utils.md5_hash(attachment_full_path)
-        if attachment_md5_hash == attachment.meta['md5_hash']:
+        if attachment_md5_hash == attachment.meta.get('md5_hash', ''):
             return False
         return True
 
     def _push_new_attachment(self, attachment):
         attachment_full_path = self.fs.path_for(attachment.filepath)
-        meta = self.req.post_attachment(attachment, attachment_full_path)
+        meta = self.req.post_attachment(attachment, attachment_full_path)['article_attachment']
         attachment_md5_hash = utils.md5_hash(attachment_full_path)
         meta['md5_hash'] = attachment_md5_hash
         meta = self.fs.save_json(attachment.meta_filepath, meta)
@@ -220,23 +243,30 @@ class Pusher(object):
     def _push_attachment(self, attachment):
         if not attachment.zendesk_id:
             self._push_new_attachment(attachment)
+            return True
         elif self._has_attachment_changed(attachment):
             self.req.delete(attachment)
             self._push_new_attachment(attachment)
+            return True
+        return False
 
     def push(self, categories):
         for category in categories:
             print('Pushing category %s' % category.name)
-            self._push(category)
+            self._push_group(category)
             for section in category.sections:
                 print('Pushing section %s' % section.name)
-                self._push(section, category)
+                self._push_group(section, category)
                 for article in section.articles:
+                    if not article.zendesk_id:
+                        self._push_new_item(article, section)
                     print('Pushing attachments for article %s' % article.name)
+                    attachments_changed = False
                     for _, attachment in article.attachments.items():
-                        self._push_attachment(attachment)
+                        if self._push_attachment(attachment):
+                            attachments_changed = True
                     print('Pushing article %s' % article.name)
-                    self._push(article, section)
+                    self._push_article(article, section, attachments_changed)
 
 
 class RecordNotFoundError(Exception):
@@ -247,6 +277,6 @@ def fetcher(company_uri, user, password):
     req = ZendeskRequest(company_uri, user, password)
     return Fetcher(req)
 
-def pusher(company_uri, user, password, fs, image_cdn, disable_comments):
+def pusher(company_uri, user, password, fs, disable_comments):
     req = ZendeskRequest(company_uri, user, password)
-    return Pusher(req, fs, image_cdn, disable_comments)
+    return Pusher(req, fs, disable_comments)

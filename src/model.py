@@ -2,6 +2,7 @@ import os
 import utils
 import markdown
 import html2text
+import re
 
 DEFAULT_LOCALE = 'en-US'
 
@@ -56,15 +57,15 @@ class Group(Base):
             'description': self.description
         }
 
-    def to_dict(self, image_cdn=None):
+    def to_dict(self):
         return {
             'name': self.name,
             'description': self.description
         }
 
-    def to_translation(self, image_cdn=None):
+    def to_translation(self):
         return {
-            'name': self.name,
+            'title': self.name,
             'body': self.description
         }
 
@@ -157,23 +158,37 @@ class Article(Base):
     def path(self):
         return os.path.join(self.section.path, self.filename)
 
-    def to_dict(self, image_cdn=None):
-        body = self.body
-        if image_cdn:
-            body = utils.convert_to_cdn_path(image_cdn, body)
-        body = markdown.markdown(body)
+    def to_dict(self):
+        return {
+            'title': self.name
+        }
+
+    def to_translation(self):
+        return {
+            'title': self.name
+        }
+
+    def to_translation_incl_body(self):
+        body = self.generate_body()
         return {
             'title': self.name,
             'body': body
         }
 
-    def to_translation(self, image_cdn=None):
-        return self.to_dict(image_cdn)
-
     def to_content(self):
         return {
             'name': self.name
         }
+
+    def generate_body(self):
+        body = self.body
+        for _, attachment in self.attachments.items():
+            zendesk_url = '('+attachment.meta['relative_path']
+            regex = r'\((./|/)attachments/'+attachment.filename
+            body = re.sub(regex, zendesk_url, body)
+
+        body = markdown.markdown(body)
+        return body
 
     def paths(self):
         return [self.content_filepath, self.body_filepath]
@@ -195,10 +210,8 @@ class Article(Base):
     @staticmethod
     def from_zendesk(zendesk_article, section):
         zendesk_body = zendesk_article.get('body', '')
-        if zendesk_body == None:
-            body = ''
-        else:
-            body = html2text.html2text(zendesk_body)
+        zendesk_body = '' if zendesk_body == None else zendesk_body
+        body = html2text.html2text(zendesk_body)
         article_filename = utils.slugify(zendesk_article['title'])
         article = Article(section, zendesk_article['title'], body, article_filename)
         article.meta = zendesk_article

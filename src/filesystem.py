@@ -60,7 +60,7 @@ class FilesystemClient(object):
     def read_yaml(self, path):
         text = self.read_text(path)
         if text:
-            return yaml.load(text)
+            return yaml.load(text, Loader=yaml.BaseLoader)
         else:
             return {}
 
@@ -161,8 +161,7 @@ class Loader(object):
         return model.Attachment.from_dict(article, meta, attachment_name)
     
     def _filter_attachment_names(self, files):
-        attachments = [a for a in files if not a.endswith(model.Attachment._meta_exp) and not a.startswith('.')]
-        return map(lambda a: os.path.splitext(a)[0], attachments)
+        return [a for a in files if not a.endswith(model.Attachment._meta_exp) and not a.startswith('.')]
 
     def _fill_category(self, category_name):
         category = self._load_category(os.path.join(self.fs.root_folder, category_name))
