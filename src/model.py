@@ -147,6 +147,8 @@ class Article(Base):
         self.section = section
         self.synced = attributes['synced']
         self.draft = attributes['draft']
+        self.author = attributes['author']
+        self.visibility = attributes['visibility']
         self.html = ''
 
     @property
@@ -164,20 +166,15 @@ class Article(Base):
 
     def to_translation(self):
         return {
-            'title': self.name
-        }
-
-    def to_translation_incl_body(self):
-        body = self.generate_body()
-        return {
             'title': self.name,
-            'body': body
+            'draft': self.draft
         }
 
     def to_attributes(self):
         attributes =  {
             'name': self.name,
-            'draft': self.draft
+            'author': self.author,
+            'visibility': self.visibility
         }
         if self.synced == False:
             attributes['synced'] = False

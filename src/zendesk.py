@@ -15,6 +15,9 @@ requests.packages.urllib3.disable_warnings()
 class ZendeskRequest(object):
     _default_url = 'https://{}/api/v2/help_center/' + utils.to_zendesk_locale(model.DEFAULT_LOCALE) + '/{}'
     _translations_url = 'https://{}/api/v2/help_center/{}'
+    _users_url = 'https://{}/api/v2/users/{}'
+    _search_url = 'https://{}/api/v2/search.json'
+    _user_segments_url = 'https://{}/api/v2/help_center/user_segments/applicable.json'
 
     item_url = '{}/{}.json'
     items_url = '{}.json?per_page=100'
@@ -22,6 +25,8 @@ class ZendeskRequest(object):
 
     attachment_url = 'articles/attachments/{}.json'
     translation_url = '{}/{}/translations/{}.json'
+
+    user_url = '{}.json'
 
     def __init__(self, company_uri, user, password, public_uri=None):
         super().__init__()
@@ -35,6 +40,9 @@ class ZendeskRequest(object):
 
     def _translation_url_for(self, path):
         return self._translations_url.format(self.company_uri, path)
+
+    def _user_url_for(self, path):
+        return self._users_url.format(self.company_uri, path)
 
     def _parse_response(self, response):
         if response.status_code == 404:
@@ -60,6 +68,33 @@ class ZendeskRequest(object):
                               headers={'Content-type': 'application/json'},
                               verify=False)
         return self._parse_response(response)
+
+    def get_user(self, uid):
+        full_url = self._user_url_for(self.user_url.format(uid))
+        response = requests.get(full_url,
+                              auth=(self.user, self.password),
+                              verify=False)
+        return self._parse_response(response).get('user', {})
+
+    def search_user(self, query):
+        full_url = self._search_url.format(self.company_uri)
+        response = requests.get(full_url,
+                              params={'query': query},
+                              auth=(self.user, self.password),
+                              verify=False)
+        results = self._parse_response(response).get('results', [])
+        if len(results) == 0:
+            return False
+        else:
+            uid = results[0]['id']
+            return self.get_user(uid)
+
+    def get_user_segments(self):
+        full_url = self._user_segments_url.format(self.company_uri)
+        response = requests.get(full_url,
+                              auth=(self.user, self.password),
+                              verify=False)
+        return self._parse_response(response).get('user_segments', [])
 
     def get_item(self, item):
         url = self.item_url.format(item.zendesk_group, item.zendesk_id)
@@ -136,6 +171,17 @@ class Fetcher(object):
     def __init__(self, req):
         super().__init__()
         self.req = req
+        self.users = {}
+        self.user_segments = {segment['id']: utils.slugify(segment['name']) for segment in self.req.get_user_segments()}
+        self.user_segments[None] = 'all'
+
+    def _get_user_by_uid(self, uid):
+        if uid in self.users:
+            return self.users[uid]
+        else:
+            user = self.req.get_user(uid)
+            self.users[uid] = user
+            return user
 
     def _get_group_attributes_and_filename(self, group):
         attributes = {
@@ -158,10 +204,14 @@ class Fetcher(object):
         return section
 
     def _instantiate_article(self, section, zendesk_article):
+        user = self._get_user_by_uid(zendesk_article['author_id'])
+        user_segment_id = zendesk_article.get('user_segment_id', None)
         attributes = {
             'name': zendesk_article['title'],
             'synced': False,
-            'draft': zendesk_article['draft']
+            'draft': zendesk_article['draft'],
+            'author': user['email'],
+            'visibility': self.user_segments[user_segment_id]
         }
         filename = utils.slugify(zendesk_article['title'])
         zendesk_body = zendesk_article.get('body', '')
@@ -170,6 +220,7 @@ class Fetcher(object):
         article = model.Article(section, attributes, body, filename)
         article.html = zendesk_body
         article.meta = zendesk_article
+        article.meta.update(attributes)
         return article
 
     def _instantiate_attachment(self, article, zendesk_attachment):
@@ -207,6 +258,18 @@ class Pusher(object):
         self.req = req
         self.fs = fs
         self.disable_comments = disable_comments
+        self.users = {}
+        self.user_segments = {utils.slugify(segment['name']): segment['id'] for segment in self.req.get_user_segments()}
+        self.user_segments['all'] = None
+
+    def _get_user_id_from_email(self, email):
+        if email in self.users:
+            return self.users[email]
+        else:
+            query = 'type:user email:"'+email+'"'
+            user = self.req.search_user(query)
+            self.users[email] = user
+            return user
 
     def _have_attributes_changed(self, attributes, item):
         for key in attributes:
@@ -261,28 +324,67 @@ class Pusher(object):
             return False
         return True
 
-    def _push_new_article_translation(self, article):
-        translation = article.to_translation_incl_body()
-        data = {'translation': translation}
-        self.req.put_translation(article, data)
-        article_body_full_path = self.fs.path_for(article.body_filepath)
-        article_md5_hash = utils.md5_hash(article_body_full_path)
-        article.meta['md5_hash'] = article_md5_hash
-        article.meta = self.fs.save_json(article.meta_filepath, article.meta)
+    def _check_and_update_article_translation(self, article, attachments_changed):
+        data = {}
+        translation_changed = False
 
-    def _check_and_update_article_section(self, article):
+        existing_draft_status = article.meta.get('draft', '')
+        if article.draft != existing_draft_status:
+            logging.info('Updating draft status for article %s from %s to %s' % (article.name, existing_draft_status, article.draft))
+            data['draft'] = article.draft
+            translation_changed = True
+
+        existing_title = article.meta.get('title', '')
+        if article.title != existing_title:
+            logging.info('Updating article title for article %s from %s to %s' % (article.name, existing_title, article.title))
+            data['title'] = article.title
+            translation_changed = True
+        
+        if attachments_changed or self._has_article_body_changed(article):
+            data['body'] = article.generate_body()
+            translation_changed = True
+
+        if translation_changed:
+            self.req.put_translation(article, {'translation': data})
+            article_body_full_path = self.fs.path_for(article.body_filepath)
+            article_md5_hash = utils.md5_hash(article_body_full_path)
+            translation = article.to_translation()
+            translation['md5_hash'] = article_md5_hash
+            meta = self.req.get_item(article)
+            meta.update(translation)
+            article.meta = self.fs.save_json(article.meta_filepath, meta)
+
+    def _check_and_update_article_attributes(self, article):
+        data = {}
+        attributes_changed = False
+
         existing_section_id = article.meta.get('section_id', '')
         if article.section.zendesk_id != existing_section_id:
             logging.info('Updating section ID for article %s from %s to %s' % (article.name, existing_section_id, article.section.zendesk_id))
-            data = {'section_id': article.section.zendesk_id}
+            data['section_id'] = article.section.zendesk_id
+            attributes_changed = True
+        
+        existing_author = article.meta.get('author', '')
+        if article.author != existing_author:
+            logging.info('Updating author for article %s from %s to %s' % (article.name, existing_author, article.author))
+            data['author_id'] = self._get_user_id_from_email(article.author)
+            attributes_changed = True
+
+        existing_visibility = article.meta.get('visibility', '')
+        if article.visibility != existing_visibility:
+            logging.info('Updating visibility for article %s from %s to %s' % (article.name, existing_visibility, article.visibility))
+            data['user_segment_id'] = self.user_segments[article.visibility]
+            attributes_changed = True
+
+        if attributes_changed:
             meta = self.req.put(article, data)
+            meta.update(article.to_attributes())
             meta = self.fs.save_json(article.meta_filepath, meta)
             article.meta = meta
 
     def _push_article(self, article, section, attachments_changed):
-        if attachments_changed or self._has_article_body_changed(article):
-            self._push_new_article_translation(article)
-        self._check_and_update_article_section(article)
+        self._check_and_update_article_translation(article, attachments_changed)
+        self._check_and_update_article_attributes(article)
 
     def _has_attachment_changed(self, attachment):
         attachment_full_path = self.fs.path_for(attachment.filepath)
@@ -317,6 +419,8 @@ class Pusher(object):
                 print('Pushing section %s' % section.name)
                 self._push_group(section, category)
                 for article in section.articles:
+                    user = self._get_user_id_from_email(article.author)
+                    print('user %s' % user['id'])
                     if article.synced == True:
                         if not article.zendesk_id:
                             self._push_new_item(article, section)
