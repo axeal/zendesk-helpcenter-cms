@@ -149,6 +149,7 @@ class Article(Base):
         self.draft = attributes['draft']
         self.author = attributes['author']
         self.visibility = attributes['visibility']
+        self.title = attributes['name']
         self.html = ''
 
     @property
