@@ -264,12 +264,12 @@ class Pusher(object):
 
     def _get_user_id_from_email(self, email):
         if email in self.users:
-            return self.users[email]
+            return self.users[email]['id']
         else:
             query = 'type:user email:"'+email+'"'
             user = self.req.search_user(query)
             self.users[email] = user
-            return user
+            return user['id']
 
     def _have_attributes_changed(self, attributes, item):
         for key in attributes:
@@ -419,8 +419,6 @@ class Pusher(object):
                 print('Pushing section %s' % section.name)
                 self._push_group(section, category)
                 for article in section.articles:
-                    user = self._get_user_id_from_email(article.author)
-                    print('user %s' % user['id'])
                     if article.synced == True:
                         if not article.zendesk_id:
                             self._push_new_item(article, section)
