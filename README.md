@@ -41,14 +41,14 @@ This will create a directory structure similar to the one below:
 
 ```
 category/
-	__group__.json
+	__group__.yaml
 	.group.meta
 	section/
-		__group__.json
+		__group__.yaml
 		.group.meta
 			article-title/
 				README.md
-				__article__.json
+				__article__.yaml
 				.article.meta
 				attachments/
 					attachment-one.png
@@ -69,14 +69,14 @@ Going back to our sample folder structure:
 
 ```
 category/
-	__group__.json
+	__group__.yaml
 	.group.meta
 	section/
-		__group__.json
+		__group__.yaml
 		.group.meta
 			article-title/
 				README.md
-				__article__.json
+				__article__.yaml
 				.article.meta
 				attachments/
 					attachment-one.png
