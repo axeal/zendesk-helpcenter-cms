@@ -117,7 +117,7 @@ class Section(Group):
     @classmethod
     def filepaths_from_path(cls, category, path):
         meta_path = os.path.join(category.path, path, cls.meta_filename + cls._meta_exp)
-        attributes_path = os.path.join(path, cls.attributes_filename + cls._attributes_exp)
+        attributes_path = os.path.join(category.path, path, cls.attributes_filename + cls._attributes_exp)
         return meta_path, attributes_path
 
     @staticmethod
