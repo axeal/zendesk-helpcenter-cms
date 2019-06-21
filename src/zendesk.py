@@ -18,6 +18,7 @@ class ZendeskRequest(object):
     _users_url = 'https://{}/api/v2/users/{}'
     _search_url = 'https://{}/api/v2/search.json'
     _user_segments_url = 'https://{}/api/v2/help_center/user_segments/applicable.json'
+    _permission_groups_url = 'https://{}/api/v2/guide/permission_groups.json'
 
     item_url = '{}/{}.json'
     items_url = '{}.json?per_page=100'
@@ -95,6 +96,13 @@ class ZendeskRequest(object):
                               auth=(self.user, self.password),
                               verify=False)
         return self._parse_response(response).get('user_segments', [])
+
+    def get_permission_groups(self):
+        full_url = self._permission_groups_url.format(self.company_uri)
+        response = requests.get(full_url,
+                              auth=(self.user, self.password),
+                              verify=False)
+        return self._parse_response(response).get('permission_groups', [])
 
     def get_item(self, item):
         url = self.item_url.format(item.zendesk_group, item.zendesk_id)
@@ -261,6 +269,7 @@ class Pusher(object):
         self.users = {}
         self.user_segments = {utils.slugify(segment['name']): segment['id'] for segment in self.req.get_user_segments()}
         self.user_segments['all'] = None
+        self.permission_groups = {utils.slugify(segment['name']): segment['id'] for segment in self.req.get_permission_groups()}
 
     def _get_user_id_from_email(self, email):
         if email in self.users:
@@ -282,11 +291,16 @@ class Pusher(object):
                 return True
         return False
 
-    def _push_new_item(self, item, parent=None):
-        data = {item.zendesk_name: item.to_dict()}
-        meta = self.req.post(item, data, parent)
-        meta = self.fs.save_json(item.meta_filepath, meta)
-        item.meta = meta
+    def _push_new_article(self, article, parent=None):
+        data = {article.zendesk_name: article.to_dict()}
+        data['article']['user_segment_id'] = self.user_segments[article.visibility]
+        data['article']['permission_group_id'] = self.permission_groups['agents-and-managers']
+        data['article']['comments_enabled'] = False
+        data['article']['section_id'] = article.section.zendesk_id
+        data['article']['author_id'] = self._get_user_id_from_email(article.author)
+        meta = self.req.post(article, data, parent)
+        meta = self.fs.save_json(article.meta_filepath, meta)
+        article.meta = meta
 
     def _push_group_translation(self, item):
         translation = item.to_translation()
@@ -311,7 +325,10 @@ class Pusher(object):
 
     def _push_group(self, item, parent=None):
         if not item.zendesk_id:
-            self._push_new_item(item, parent)
+            data = {item.zendesk_name: item.to_dict()}
+            meta = self.req.post(item, data, parent)
+            meta = self.fs.save_json(item.meta_filepath, meta)
+            item.meta = meta
         else:
             self._push_group_translation(item)
         if isinstance(item, model.Section):
@@ -328,7 +345,7 @@ class Pusher(object):
         data = {}
         translation_changed = False
 
-        existing_draft_status = article.meta.get('draft', '')
+        existing_draft_status = article.meta.get('draft', False)
         if article.draft != existing_draft_status:
             logging.info('Updating draft status for article %s from %s to %s' % (article.name, existing_draft_status, article.draft))
             data['draft'] = article.draft
@@ -341,6 +358,7 @@ class Pusher(object):
             translation_changed = True
         
         if attachments_changed or self._has_article_body_changed(article):
+            logging.info('Updating article body for article %s' % (article.name))
             data['body'] = article.generate_body()
             translation_changed = True
 
@@ -351,7 +369,7 @@ class Pusher(object):
             translation = article.to_translation()
             translation['md5_hash'] = article_md5_hash
             meta = self.req.get_item(article)
-            meta.update(translation)
+            meta.update(translation)            
             article.meta = self.fs.save_json(article.meta_filepath, meta)
 
     def _check_and_update_article_attributes(self, article):
@@ -377,10 +395,9 @@ class Pusher(object):
             attributes_changed = True
 
         if attributes_changed:
-            meta = self.req.put(article, data)
+            meta = self.req.put(article, {'article':data})
             meta.update(article.to_attributes())
-            meta = self.fs.save_json(article.meta_filepath, meta)
-            article.meta = meta
+            article.meta = self.fs.save_json(article.meta_filepath, meta)
 
     def _push_article(self, article, section, attachments_changed):
         self._check_and_update_article_translation(article, attachments_changed)
@@ -396,8 +413,7 @@ class Pusher(object):
     def _push_new_attachment(self, attachment):
         attachment_full_path = self.fs.path_for(attachment.filepath)
         meta = self.req.post_attachment(attachment, attachment_full_path)['article_attachment']
-        attachment_md5_hash = utils.md5_hash(attachment_full_path)
-        meta['md5_hash'] = attachment_md5_hash
+        meta['md5_hash']  = utils.md5_hash(attachment_full_path)
         meta = self.fs.save_json(attachment.meta_filepath, meta)
         attachment.meta = meta
     
@@ -421,7 +437,7 @@ class Pusher(object):
                 for article in section.articles:
                     if article.synced == True:
                         if not article.zendesk_id:
-                            self._push_new_item(article, section)
+                            self._push_new_article(article, section)
                         print('Pushing attachments for article %s' % article.name)
                         attachments_changed = False
                         for _, attachment in article.attachments.items():
