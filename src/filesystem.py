@@ -32,8 +32,12 @@ class FilesystemClient(object):
         else:
             return ''
 
+    def _path_exists(self, path):
+        full_path = self.path_for(path)
+        return os.path.exists(full_path)
+
     def save_json(self, path, data):
-        if os.path.exists(path):
+        if self._path_exists(path):
             new_data = data
             data = self.read_json(path)
             data.update(new_data)
