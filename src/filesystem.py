@@ -32,8 +32,12 @@ class FilesystemClient(object):
         else:
             return ''
 
+    def _path_exists(self, path):
+        full_path = self.path_for(path)
+        return os.path.exists(full_path)
+
     def save_json(self, path, data):
-        if os.path.exists(path):
+        if self._path_exists(path):
             new_data = data
             data = self.read_json(path)
             data.update(new_data)
@@ -60,7 +64,7 @@ class FilesystemClient(object):
     def read_yaml(self, path):
         text = self.read_text(path)
         if text:
-            return yaml.load(text, Loader=yaml.BaseLoader)
+            return yaml.load(text, Loader=yaml.FullLoader)
         else:
             return {}
 
@@ -103,7 +107,7 @@ class Saver(object):
 
     def _save_item(self, item):
         self.fs.save_json(item.meta_filepath, item.meta)
-        self.fs.save_yaml(item.content_filepath, item.to_content())
+        self.fs.save_yaml(item.attributes_filepath, item.to_attributes())
 
     def _save_attachment(self, attachment):
         attachment_path = self.fs.path_for(attachment.filepath)
@@ -122,6 +126,7 @@ class Saver(object):
                     self._save_item(article)
                     logging.info('Article %s saved' % article.name)
                     self.fs.save_text(article.body_filepath, article.body)
+                    self.fs.save_text(article.html_filepath, article.html)
                     for _, attachment in article.attachments.items():
                         self._save_attachment(attachment)
                         logging.info('Attachment %s saved' % attachment.name)
@@ -132,28 +137,39 @@ class Loader(object):
     def __init__(self, fs):
         self.fs = fs
 
-    def _load_category(self, category_path):
-        category_name = os.path.basename(category_path)
-        meta_path, content_path = model.Category.filepaths_from_path(category_path)
+    def _load_category(self, category_dirname):
+        meta_path, attributes_path = model.Category.filepaths_from_path(category_dirname)
         meta = self.fs.read_json(meta_path)
-        content = self.fs.read_yaml(content_path)
-        content = content or {'name': os.path.basename(category_path)}
-        return model.Category.from_dict(meta, content, category_name)
+        attributes = self.fs.read_yaml(attributes_path)
+        attributes =  {
+            'name': attributes.get('name', category_dirname),
+            'description': attributes.get('description', '')
+        }
+        return model.Category.from_dict(meta, attributes, category_dirname)
 
-    def _load_section(self, category, section_name):
-        meta_path, content_path = model.Section.filepaths_from_path(category, section_name)
+    def _load_section(self, category, section_path, section_dirname):
+        meta_path, attributes_path = model.Section.filepaths_from_path(category, section_dirname)
         meta = self.fs.read_json(meta_path)
-        content = self.fs.read_yaml(content_path)
-        content = content or {'name': section_name}
-        return model.Section.from_dict(category, meta, content, section_name)
+        attributes = self.fs.read_yaml(attributes_path)
+        attributes = {
+            'name': attributes.get('name', section_dirname),
+            'description': attributes.get('description', '')
+        }
+        return model.Section.from_dict(category, meta, attributes, section_dirname)
 
-    def _load_article(self, section, article_name):
-        meta_path, content_path, body_path = model.Article.filepaths_from_path(section, article_name)
+    def _load_article(self, section, article_path, article_dirname):
+        meta_path, attributes_path, body_path = model.Article.filepaths_from_path(section, article_dirname)
         meta = self.fs.read_json(meta_path)
-        content = self.fs.read_yaml(content_path)
-        content = content or {'name': article_name}
+        attributes = self.fs.read_yaml(attributes_path)
+        attributes = {
+            'name': attributes.get('name', article_dirname),
+            'synced': attributes.get('synced', True),
+            'draft': attributes.get('draft', True),
+            'author': attributes.get('author', ''),
+            'visibility': attributes.get('visibility', 'all')
+        }
         body = self.fs.read_text(body_path)
-        return model.Article.from_dict(section, meta, content, body, article_name)
+        return model.Article.from_dict(section, meta, attributes, body, article_dirname)
 
     def _load_attachment(self, article, attachment_name):
         meta_path = model.Attachment.filepaths_from_path(article, attachment_name)
@@ -163,20 +179,22 @@ class Loader(object):
     def _filter_attachment_names(self, files):
         return [a for a in files if not a.endswith(model.Attachment._meta_exp) and not a.startswith('.')]
 
-    def _fill_category(self, category_name):
-        category = self._load_category(os.path.join(self.fs.root_folder, category_name))
+    def _fill_category(self, category_dirname):
+        category = self._load_category(category_dirname)
         self._fill_sections(category)
         return category
 
     def _fill_sections(self, category):
-        for section_name in self.fs.read_directories(category.path):
-            section = self._load_section(category, section_name)
+        for section_dirname in self.fs.read_directories(category.path):
+            section_path = os.path.join(category.path, section_dirname)
+            section = self._load_section(category, section_path, section_dirname)
             category.sections.append(section)
             self._fill_articles(section)
 
     def _fill_articles(self, section):
-        for article_name in self.fs.read_directories(section.path):
-            article = self._load_article(section, article_name)
+        for article_dirname in self.fs.read_directories(section.path):
+            article_path = os.path.join(section.path, article_dirname)
+            article = self._load_article(section, article_path, article_dirname)
             section.articles.append(article)
             self._fill_attachments(article)
 

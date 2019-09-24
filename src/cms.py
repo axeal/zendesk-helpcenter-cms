@@ -121,6 +121,8 @@ def parse_config(args):
     options = dict(config[config.default_section])
     options.update(vars(args))
     options['disable_article_comments'] = bool(options.get('disable_article_comments', False))
+    if 'public_uri' not in options:
+        options['public_uri'] = options['company_uri']
     return options
 
 
