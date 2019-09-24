@@ -185,7 +185,7 @@ class Article(Base):
         body = self.body
         for _, attachment in self.attachments.items():
             zendesk_url = '('+attachment.meta['relative_path']
-            regex = r'\((./|/)attachments/'+attachment.filename
+            regex = r'\((./|/|)attachments/'+attachment.filename
             body = re.sub(regex, zendesk_url, body)
 
         body = markdown.markdown(body, extensions=['fenced_code', 'tables'])
