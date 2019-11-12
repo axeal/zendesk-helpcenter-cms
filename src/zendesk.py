@@ -265,7 +265,7 @@ class Pusher(object):
     def __init__(self, req, fs, disable_comments):
         self.req = req
         self.fs = fs
-        self.disable_comments = disable_comments
+        self.disable_comments = False if disable_comments == 0 else True
         self.users = {}
         self.user_segments = {utils.slugify(segment['name']): segment['id'] for segment in self.req.get_user_segments()}
         self.user_segments['all'] = None
@@ -295,7 +295,7 @@ class Pusher(object):
         data = {article.zendesk_name: article.to_dict()}
         data['article']['user_segment_id'] = self.user_segments[article.visibility]
         data['article']['permission_group_id'] = self.permission_groups['agents-and-managers']
-        data['article']['comments_enabled'] = False
+        data['article']['comments_disabled'] = self.disable_comments
         data['article']['section_id'] = article.section.zendesk_id
         data['article']['author_id'] = self._get_user_id_from_email(article.author)
         meta = self.req.post(article, data, parent)
