@@ -285,7 +285,9 @@ class Pusher(object):
             zendesk_body = item.meta.get(key, '')
             zendesk_body = '' if zendesk_body == None else zendesk_body
             zendesk_hash = hashlib.md5(zendesk_body.encode('utf-8'))
-            item_hash = hashlib.md5(attributes[key].encode('utf-8'))
+            item_body = attributes.get(key, '')
+            item_body = '' if item_body == None else item_body
+            item_hash = hashlib.md5(item_body.encode('utf-8'))
             if zendesk_hash.hexdigest() != item_hash.hexdigest():
                 print('key: %s meta: %s attribute: %s' %(key, zendesk_body, attributes[key]))
                 return True
