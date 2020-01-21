@@ -188,7 +188,7 @@ class Article(Base):
             regex = r'\((./|/|)attachments/'+attachment.filename
             body = re.sub(regex, zendesk_url, body)
 
-        body = markdown.markdown(body, extensions=['fenced_code', 'tables'])
+        body = markdown.markdown(body, extensions=['fenced_code', 'tables', 'mdx_truly_sane_lists'])
         return body
 
     def paths(self):
