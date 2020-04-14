@@ -166,7 +166,7 @@ class Loader(object):
             'synced': attributes.get('synced', True),
             'draft': attributes.get('draft', True),
             'author': attributes.get('author', ''),
-            'visibility': attributes.get('visibility', 'all')
+            'visibility': attributes.get('visibility', 'signed-in-users')
         }
         body = self.fs.read_text(body_path)
         return model.Article.from_dict(section, meta, attributes, body, article_dirname)
