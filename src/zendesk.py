@@ -336,10 +336,19 @@ class Pusher(object):
         if isinstance(item, model.Section):
             self._check_and_update_section_category(item)
 
-    def _has_article_body_changed(self, article):
+    def _has_article_body_changed(self, article, generated_body):
         article_body_full_path = self.fs.path_for(article.body_filepath)
-        article_md5_hash = utils.md5_hash(article_body_full_path)
-        if article_md5_hash == article.meta.get('md5_hash', ''):
+        existing_body = article.meta.get('generated_body', '')
+        if existing_body == '':
+            translation = article.to_translation()
+            translation['generated_body'] = generated_body
+            meta = article.meta
+            meta.update(translation)            
+            article.meta = self.fs.save_json(article.meta_filepath, meta)
+            article_md5_hash = utils.md5_hash(article_body_full_path)
+            if article_md5_hash == article.meta.get('md5_hash', ''):
+                return False
+        elif existing_body == generated_body:
             return False
         return True
 
@@ -359,20 +368,24 @@ class Pusher(object):
             data['title'] = article.title
             translation_changed = True
         
-        if attachments_changed or self._has_article_body_changed(article):
+        body = article.generate_body()
+        if attachments_changed or self._has_article_body_changed(article, body):
             logging.info('Updating article body for article %s' % (article.name))
-            data['body'] = article.generate_body()
+            data['body'] = body
             translation_changed = True
 
         if translation_changed:
             self.req.put_translation(article, {'translation': data})
+            translation = article.to_translation()
             article_body_full_path = self.fs.path_for(article.body_filepath)
             article_md5_hash = utils.md5_hash(article_body_full_path)
             translation = article.to_translation()
             translation['md5_hash'] = article_md5_hash
+            translation['generated_body'] = body
             meta = self.req.get_item(article)
             meta.update(translation)            
             article.meta = self.fs.save_json(article.meta_filepath, meta)
+            
 
     def _check_and_update_article_attributes(self, article):
         data = {}
