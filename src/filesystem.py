@@ -164,7 +164,7 @@ class Loader(object):
         attributes = {
             'name': attributes.get('name', article_dirname),
             'synced': attributes.get('synced', True),
-            'draft': attributes.get('draft', True),
+            'draft': attributes.get('draft', False),
             'author': attributes.get('author', ''),
             'visibility': attributes.get('visibility', 'signed-in-users')
         }
