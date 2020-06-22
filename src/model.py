@@ -150,6 +150,7 @@ class Article(Base):
         self.author = attributes['author']
         self.visibility = attributes['visibility']
         self.title = attributes['name']
+        self.comments_disabled = attributes['comments_disabled']
         self.html = ''
 
     @property
@@ -175,7 +176,8 @@ class Article(Base):
         attributes =  {
             'name': self.name,
             'author': self.author,
-            'visibility': self.visibility
+            'visibility': self.visibility,
+            'comments_disabled': self.comments_disabled
         }
         if self.synced == False:
             attributes['synced'] = False

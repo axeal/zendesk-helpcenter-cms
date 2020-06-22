@@ -219,7 +219,8 @@ class Fetcher(object):
             'synced': False,
             'draft': zendesk_article['draft'],
             'author': user['email'],
-            'visibility': self.user_segments[user_segment_id]
+            'visibility': self.user_segments[user_segment_id],
+            'comments_disabled': zendesk_article['comments_disabled']
         }
         filename = utils.slugify(zendesk_article['title'])
         zendesk_body = zendesk_article.get('body', '')
@@ -262,10 +263,9 @@ class Fetcher(object):
 
 class Pusher(object):
 
-    def __init__(self, req, fs, disable_comments):
+    def __init__(self, req, fs):
         self.req = req
         self.fs = fs
-        self.disable_comments = False if disable_comments == 0 else True
         self.users = {}
         self.user_segments = {utils.slugify(segment['name']): segment['id'] for segment in self.req.get_user_segments()}
         self.user_segments['all'] = None
@@ -297,7 +297,7 @@ class Pusher(object):
         data = {article.zendesk_name: article.to_dict()}
         data['article']['user_segment_id'] = self.user_segments[article.visibility]
         data['article']['permission_group_id'] = self.permission_groups['agents-and-managers']
-        data['article']['comments_disabled'] = self.disable_comments
+        data['article']['comments_disabled'] = article.comments_disabled
         data['article']['section_id'] = article.section.zendesk_id
         data['article']['author_id'] = self._get_user_id_from_email(article.author)
         meta = self.req.post(article, data, parent)
@@ -392,6 +392,12 @@ class Pusher(object):
             data['user_segment_id'] = self.user_segments[article.visibility]
             attributes_changed = True
 
+        existing_comments_disabled = article.meta.get('comments_disabled', False)
+        if article.comments_disabled != existing_comments_disabled:
+            logging.info('Updating comments_disabled for article %s from %s to %s' % (article.name, existing_comments_disabled, article.comments_disabled))
+            data['comments_disabled'] = article.comments_disabled
+            attributes_changed = True
+
         if attributes_changed:
             meta = self.req.put(article, {'article':data})
             meta.update(article.to_attributes())
@@ -456,6 +462,6 @@ def fetcher(company_uri, user, password):
     req = ZendeskRequest(company_uri, user, password)
     return Fetcher(req)
 
-def pusher(company_uri, user, password, fs, disable_comments):
+def pusher(company_uri, user, password, fs):
     req = ZendeskRequest(company_uri, user, password)
-    return Pusher(req, fs, disable_comments)
+    return Pusher(req, fs)
