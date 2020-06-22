@@ -24,10 +24,10 @@ class ExportTask(object):
 
     def execute(self, args):
         logging.info('Running export task...')
-        categories = filesystem.loader(args['root_folder']).load()
+        categories = filesystem.loader(args['root_folder'], args['disable_article_comments']).load()
         filesystem_client = filesystem.client(args['root_folder'])
         zendesk.pusher(args['company_uri'], args['user'], args['password'],
-                       filesystem_client, args['disable_article_comments']).push(categories)
+                       filesystem_client).push(categories)
         logging.info('Export task completed')
 
 
@@ -120,7 +120,7 @@ def parse_config(args):
     config.read(CONFIG_FILE)
     options = dict(config[config.default_section])
     options.update(vars(args))
-    options['disable_article_comments'] = bool(options.get('disable_article_comments', False))
+    options['disable_article_comments'] = False if options.get('disable_article_comments', 0) == '0' else True
     if 'public_uri' not in options:
         options['public_uri'] = options['company_uri']
     return options

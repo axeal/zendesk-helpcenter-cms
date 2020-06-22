@@ -131,11 +131,11 @@ class Saver(object):
                         self._save_attachment(attachment)
                         logging.info('Attachment %s saved' % attachment.name)
 
-
 class Loader(object):
 
-    def __init__(self, fs):
+    def __init__(self, fs, disable_comments):
         self.fs = fs
+        self.disable_comments = False if disable_comments == 0 else True
 
     def _load_category(self, category_dirname):
         meta_path, attributes_path = model.Category.filepaths_from_path(category_dirname)
@@ -166,7 +166,8 @@ class Loader(object):
             'synced': attributes.get('synced', True),
             'draft': attributes.get('draft', False),
             'author': attributes.get('author', ''),
-            'visibility': attributes.get('visibility', 'signed-in-users')
+            'visibility': attributes.get('visibility', 'signed-in-users'),
+            'comments_disabled': attributes.get('comments_disabled', self.disable_comments)
         }
         body = self.fs.read_text(body_path)
         return model.Article.from_dict(section, meta, attributes, body, article_dirname)
@@ -218,9 +219,9 @@ def saver(root_folder, zendesk_client=None):
     return Saver(fs, zendesk_client)
 
 
-def loader(root_folder):
+def loader(root_folder, disable_comments):
     fs = FilesystemClient(root_folder)
-    return Loader(fs)
+    return Loader(fs, disable_comments)
 
 
 def client(root_folder):
