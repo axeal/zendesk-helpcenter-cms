@@ -435,6 +435,7 @@ class Pusher(object):
                 for article in section.articles:
                     if article.synced == True:
                         if not article.zendesk_id:
+                            logging.info('Pushing new article: %s' % article.name)
                             self._push_new_article(article, section)
                         logging.debug('Pushing attachments for article %s' % article.name)
                         attachments_changed = False
