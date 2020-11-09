@@ -296,7 +296,7 @@ class Pusher(object):
     def _push_new_article(self, article, parent=None):
         data = {article.zendesk_name: article.to_dict()}
         data['article']['user_segment_id'] = self.user_segments[article.visibility]
-        data['article']['permission_group_id'] = self.permission_groups['agents-and-managers']
+        data['article']['permission_group_id'] = self.permission_groups['agents-and-admins']
         data['article']['comments_disabled'] = article.comments_disabled
         data['article']['section_id'] = article.section.zendesk_id
         data['article']['author_id'] = self._get_user_id_from_email(article.author)
